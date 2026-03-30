@@ -3,19 +3,25 @@ import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { createDefaultCategories } from '@/lib/defaults'
 
+function birthDateToPassword(birthDate: string) {
+  const [year, month, day] = birthDate.split('-')
+  if (!year || !month || !day) {
+    return null
+  }
+
+  return `${day}${month}${year}`
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()
     const email = String(body.email || '').trim().toLowerCase()
-    const password = String(body.password || '')
     const name = String(body.name || '').trim() || email.split('@')[0]
+    const birthDate = String(body.birthDate || '').trim()
+    const password = birthDateToPassword(birthDate)
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Informe e-mail e senha.' }, { status: 400 })
-    }
-
-    if (password.length < 6) {
-      return NextResponse.json({ error: 'A senha precisa ter pelo menos 6 caracteres.' }, { status: 400 })
+    if (!email || !name || !birthDate || !password) {
+      return NextResponse.json({ error: 'Informe nome, e-mail e data de nascimento.' }, { status: 400 })
     }
 
     const existing = await sql`
@@ -26,7 +32,7 @@ export async function POST(request: Request) {
     ` as { id: string }[]
 
     if (existing.length) {
-      return NextResponse.json({ error: 'Este e-mail já está cadastrado.' }, { status: 409 })
+      return NextResponse.json({ error: 'Este e-mail ja esta cadastrado.' }, { status: 409 })
     }
 
     const userId = crypto.randomUUID()
@@ -35,8 +41,8 @@ export async function POST(request: Request) {
 
     await sql.transaction([
       sql`
-        insert into users (id, email, password_hash, name)
-        values (${userId}, ${email}, ${passwordHash}, ${name})
+        insert into users (id, email, password_hash, name, birth_date)
+        values (${userId}, ${email}, ${passwordHash}, ${name}, ${birthDate})
       `,
       ...defaultCategories.map((category) => sql`
         insert into categories (id, user_id, name, emoji, color, type)
@@ -44,9 +50,9 @@ export async function POST(request: Request) {
       `),
     ])
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, generatedPassword: password })
   } catch (error) {
     console.error(error)
-    return NextResponse.json({ error: 'Não foi possível criar a conta.' }, { status: 500 })
+    return NextResponse.json({ error: 'Nao foi possivel criar a conta.' }, { status: 500 })
   }
 }
