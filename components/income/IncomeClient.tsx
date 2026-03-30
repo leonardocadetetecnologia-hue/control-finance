@@ -1,20 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { apiRequest } from '@/lib/api'
 import { formatBRL, formatDate, todayISO } from '@/lib/utils/format'
 import type { IncomeSource } from '@/lib/types'
 
-function toast(msg: string) { const t=document.createElement('div');t.className='toast';t.textContent='✓ '+msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3200) }
+function toast(msg: string) { const t=document.createElement('div');t.className='toast';t.textContent='âœ“ '+msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3200) }
 
 export default function IncomeClient({ initialSources }: { initialSources: IncomeSource[] }) {
-  const supabase = createClient()
   const [sources, setSources] = useState(initialSources)
   const [showModal, setShowModal] = useState(false)
   const [name, setName] = useState('')
   const [val, setVal] = useState('')
   const [day, setDay] = useState('')
-  const [type, setType] = useState('Salário CLT')
+  const [type, setType] = useState('SalÃ¡rio CLT')
   const [start, setStart] = useState(todayISO())
   const [saving, setSaving] = useState(false)
 
@@ -31,19 +30,20 @@ export default function IncomeClient({ initialSources }: { initialSources: Incom
     if (!name || isNaN(v) || v <= 0 || !d) { alert('Preencha todos os campos.'); return }
     setSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      const { data: src } = await supabase.from('income_sources').insert({ user_id: user!.id, name, value: v, day: d, source_type: type, start_date: start }).select().single()
-      await supabase.from('events').insert({ user_id: user!.id, description: name, value: v, type: 'income', repeat: 'monthly', day: d, category: 'Salário' })
+      const src = await apiRequest<IncomeSource>('/api/income-sources', {
+        method: 'POST',
+        body: JSON.stringify({ name, value: v, day: d, source_type: type, start_date: start }),
+      })
       setSources(prev => [...prev, src])
       setShowModal(false)
-      setName(''); setVal(''); setDay(''); setType('Salário CLT'); setStart(todayISO())
-      toast('Renda cadastrada — evento mensal criado automaticamente')
+      setName(''); setVal(''); setDay(''); setType('SalÃ¡rio CLT'); setStart(todayISO())
+      toast('Renda cadastrada â€” evento mensal criado automaticamente')
     } catch (e: any) { alert(e.message) } finally { setSaving(false) }
   }
 
   async function del(id: string) {
     if (!confirm('Remover esta fonte de renda?')) return
-    await supabase.from('income_sources').delete().eq('id', id)
+    await apiRequest<{ ok: true }>(`/api/income-sources/${id}`, { method: 'DELETE' })
     setSources(prev => prev.filter(s => s.id !== id))
     toast('Fonte removida')
   }
@@ -55,7 +55,6 @@ export default function IncomeClient({ initialSources }: { initialSources: Incom
         <button className="btn-primary" onClick={() => setShowModal(true)}>+ Fonte de Renda</button>
       </div>
 
-      {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '18px' }}>
         <div className="card" style={{ padding: '18px' }}>
           <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '10px' }}>Renda Mensal Total</div>
@@ -63,9 +62,9 @@ export default function IncomeClient({ initialSources }: { initialSources: Incom
           <div style={{ fontSize: '11px', color: 'var(--text3)' }}>{sources.length} fonte(s) cadastrada(s)</div>
         </div>
         <div className="card" style={{ padding: '18px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '10px' }}>Próximo Recebimento</div>
-          <div className="hide-val font-bebas" style={{ fontSize: '28px', color: 'var(--text)', marginBottom: '3px' }}><span>{nextPayment ? formatBRL(nextPayment.value) : '—'}</span></div>
-          <div style={{ fontSize: '11px', color: 'var(--text3)' }}>{nextPayment ? `${nextPayment.name} — dia ${nextPayment.day} (${nextPayment._next.toLocaleDateString('pt-BR')})` : 'Nenhuma fonte cadastrada'}</div>
+          <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '10px' }}>PrÃ³ximo Recebimento</div>
+          <div className="hide-val font-bebas" style={{ fontSize: '28px', color: 'var(--text)', marginBottom: '3px' }}><span>{nextPayment ? formatBRL(nextPayment.value) : 'â€”'}</span></div>
+          <div style={{ fontSize: '11px', color: 'var(--text3)' }}>{nextPayment ? `${nextPayment.name} â€” dia ${nextPayment.day} (${nextPayment._next.toLocaleDateString('pt-BR')})` : 'Nenhuma fonte cadastrada'}</div>
         </div>
       </div>
 
@@ -75,27 +74,26 @@ export default function IncomeClient({ initialSources }: { initialSources: Incom
           <div style={{ color: 'var(--text3)', fontSize: '12px', textAlign: 'center', padding: '22px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: '12px' }}>Nenhuma fonte cadastrada.</div>
         ) : sources.map(s => (
           <div key={s.id} className="card" style={{ padding: '11px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '32px', height: '32px', background: 'var(--bg4)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0, border: '1px solid var(--border)' }}>💼</div>
+            <div style={{ width: '32px', height: '32px', background: 'var(--bg4)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0, border: '1px solid var(--border)' }}>ðŸ’¼</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{s.name}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text3)' }}>{s.source_type} · desde {formatDate(s.start_date)}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text3)' }}>{s.source_type} Â· desde {formatDate(s.start_date)}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div className="hide-val" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--green)' }}><span>{formatBRL(s.value)}/mês</span></div>
+              <div className="hide-val" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--green)' }}><span>{formatBRL(s.value)}/mÃªs</span></div>
               <div style={{ fontSize: '10px', color: 'var(--text3)' }}>Recebe dia {s.day}</div>
             </div>
-            <button onClick={() => del(s.id)} style={{ width: '24px', height: '24px', background: 'none', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text3)', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} onMouseEnter={e=>(e.currentTarget.style.color='var(--red)')} onMouseLeave={e=>(e.currentTarget.style.color='var(--text3)')}>✕</button>
+            <button onClick={() => del(s.id)} style={{ width: '24px', height: '24px', background: 'none', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text3)', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} onMouseEnter={e=>(e.currentTarget.style.color='var(--red)')} onMouseLeave={e=>(e.currentTarget.style.color='var(--text3)')}>âœ•</button>
           </div>
         ))}
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
           <div className="modal-box" style={{ width: '430px' }}>
             <div style={{ padding: '17px 22px 13px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span className="font-bebas" style={{ fontSize: '19px', letterSpacing: '2px' }}>Fonte de Renda</span>
-              <button onClick={() => setShowModal(false)} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '11px' }}>✕</button>
+              <button onClick={() => setShowModal(false)} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '11px' }}>âœ•</button>
             </div>
             <div style={{ padding: '18px 22px' }}>
               <div style={{ marginBottom: '13px' }}>
@@ -116,7 +114,7 @@ export default function IncomeClient({ initialSources }: { initialSources: Incom
                 <div>
                   <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Tipo</label>
                   <select className="fi" value={type} onChange={e => setType(e.target.value)}>
-                    <option>Salário CLT</option><option>Salário PJ</option><option>Freelance</option><option>Aluguel</option><option>Investimento</option><option>Outros</option>
+                    <option>SalÃ¡rio CLT</option><option>SalÃ¡rio PJ</option><option>Freelance</option><option>Aluguel</option><option>Investimento</option><option>Outros</option>
                   </select>
                 </div>
                 <div>

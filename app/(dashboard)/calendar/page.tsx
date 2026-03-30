@@ -1,15 +1,14 @@
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/auth'
 import CalendarClient from '@/components/calendar/CalendarClient'
+import { getEvents } from '@/lib/data'
+import { redirect } from 'next/navigation'
 
 export default async function CalendarPage() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) redirect('/login')
 
-  const { data: events } = await supabase
-    .from('events')
-    .select('*')
-    .eq('user_id', user!.id)
-    .order('date', { ascending: true })
+  const events = await getEvents(userId)
 
-  return <CalendarClient initialEvents={events || []} />
+  return <CalendarClient initialEvents={events} />
 }

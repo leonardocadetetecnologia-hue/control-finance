@@ -1,21 +1,24 @@
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/auth'
 import HistoryClient from '@/components/history/HistoryClient'
+import { getCategories, getInstallments, getTransactions } from '@/lib/data'
+import { redirect } from 'next/navigation'
 
 export default async function HistoryPage() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) redirect('/login')
 
-  const [{ data: transactions }, { data: installments }, { data: categories }] = await Promise.all([
-    supabase.from('transactions').select('*').eq('user_id', user!.id).order('date', { ascending: false }),
-    supabase.from('installments').select('*').eq('user_id', user!.id).order('date', { ascending: true }),
-    supabase.from('categories').select('name, emoji, color').eq('user_id', user!.id),
+  const [transactions, installments, categories] = await Promise.all([
+    getTransactions(userId),
+    getInstallments(userId),
+    getCategories(userId),
   ])
 
   return (
     <HistoryClient
-      transactions={transactions || []}
-      installments={installments || []}
-      categories={categories || []}
+      transactions={transactions}
+      installments={installments}
+      categories={categories.map(({ name, emoji, color }) => ({ name, emoji, color }))}
     />
   )
 }

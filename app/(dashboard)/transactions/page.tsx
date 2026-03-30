@@ -1,19 +1,22 @@
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/auth'
 import TransactionsClient from '@/components/transactions/TransactionsClient'
+import { getCategories, getTransactions } from '@/lib/data'
+import { redirect } from 'next/navigation'
 
 export default async function TransactionsPage() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) redirect('/login')
 
-  const [{ data: transactions }, { data: categories }] = await Promise.all([
-    supabase.from('transactions').select('*, installments(*)').eq('user_id', user!.id).order('created_at', { ascending: false }),
-    supabase.from('categories').select('*').eq('user_id', user!.id),
+  const [transactions, categories] = await Promise.all([
+    getTransactions(userId),
+    getCategories(userId),
   ])
 
   return (
     <TransactionsClient
-      initialTransactions={transactions || []}
-      categories={categories || []}
+      initialTransactions={transactions}
+      categories={categories}
     />
   )
 }

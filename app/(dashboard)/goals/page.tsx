@@ -1,15 +1,14 @@
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/auth'
 import GoalsClient from '@/components/goals/GoalsClient'
+import { getGoals } from '@/lib/data'
+import { redirect } from 'next/navigation'
 
 export default async function GoalsPage() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) redirect('/login')
 
-  const { data: goals } = await supabase
-    .from('goals')
-    .select('*')
-    .eq('user_id', user!.id)
-    .order('created_at', { ascending: false })
+  const goals = await getGoals(userId)
 
-  return <GoalsClient initialGoals={goals || []} />
+  return <GoalsClient initialGoals={goals} />
 }

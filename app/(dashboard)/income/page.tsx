@@ -1,15 +1,14 @@
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/auth'
 import IncomeClient from '@/components/income/IncomeClient'
+import { getIncomeSources } from '@/lib/data'
+import { redirect } from 'next/navigation'
 
 export default async function IncomePage() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) redirect('/login')
 
-  const { data: sources } = await supabase
-    .from('income_sources')
-    .select('*')
-    .eq('user_id', user!.id)
-    .order('created_at', { ascending: false })
+  const sources = await getIncomeSources(userId)
 
-  return <IncomeClient initialSources={sources || []} />
+  return <IncomeClient initialSources={sources} />
 }

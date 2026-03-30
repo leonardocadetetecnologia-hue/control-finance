@@ -9,10 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.4.0",
-    "@supabase/supabase-js": "^2.43.0",
+    "@neondatabase/serverless": "^0.10.4",
+    "bcryptjs": "^2.4.3",
     "date-fns": "^3.6.0",
     "lucide-react": "^0.383.0",
+    "next-auth": "^5.0.0-beta.25",
     "next": "14.2.3",
     "react": "^18",
     "react-dom": "^18",

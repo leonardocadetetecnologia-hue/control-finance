@@ -2,8 +2,7 @@
 
 import { useState, useEffect, createContext, useContext } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import type { User } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/client'
+import { signOut } from 'next-auth/react'
 import { MONTHS } from '@/lib/utils/format'
 
 // ── Context ──────────────────────────────────────────
@@ -42,7 +41,7 @@ function NavIcon({ name }: { name: string }) {
   return <>{icons[name] || null}</>
 }
 
-export default function DashboardShell({ children, user }: { children: React.ReactNode; user: User }) {
+export default function DashboardShell({ children, user }: { children: React.ReactNode; user: { email?: string | null } }) {
   const now = new Date()
   const [month, setMonth] = useState(now.getMonth())
   const [year, setYear] = useState(now.getFullYear())
@@ -51,8 +50,6 @@ export default function DashboardShell({ children, user }: { children: React.Rea
   const [txModalOpen, setTxModalOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
-
   useEffect(() => {
     const saved = localStorage.getItem('fx_theme') || 'dark'
     const savedHidden = localStorage.getItem('fx_hidden') === 'true'
@@ -82,7 +79,7 @@ export default function DashboardShell({ children, user }: { children: React.Rea
   }
 
   async function logout() {
-    await supabase.auth.signOut()
+    await signOut({ redirect: false })
     router.push('/login')
     router.refresh()
   }

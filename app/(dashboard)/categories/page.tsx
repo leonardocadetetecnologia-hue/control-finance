@@ -1,19 +1,22 @@
-import { createClient } from '@/lib/supabase/server'
+import { auth } from '@/auth'
 import CategoriesClient from '@/components/categories/CategoriesClient'
+import { getCategories, getTransactions } from '@/lib/data'
+import { redirect } from 'next/navigation'
 
 export default async function CategoriesPage() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) redirect('/login')
 
-  const [{ data: categories }, { data: transactions }] = await Promise.all([
-    supabase.from('categories').select('*').eq('user_id', user!.id).order('name'),
-    supabase.from('transactions').select('id, category').eq('user_id', user!.id),
+  const [categories, transactions] = await Promise.all([
+    getCategories(userId),
+    getTransactions(userId),
   ])
 
   return (
     <CategoriesClient
-      initialCategories={categories || []}
-      transactions={transactions || []}
+      initialCategories={categories}
+      transactions={transactions.map((transaction) => ({ id: transaction.id, category: transaction.category }))}
     />
   )
 }
