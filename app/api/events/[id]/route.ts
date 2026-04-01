@@ -12,10 +12,10 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     return NextResponse.json({ ok: true })
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 })
+      return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })
     }
 
     console.error(error)
-    return NextResponse.json({ error: 'Não foi possível remover o evento.' }, { status: 500 })
+    return NextResponse.json({ error: 'Nao foi possivel remover o evento.' }, { status: 500 })
   }
 }

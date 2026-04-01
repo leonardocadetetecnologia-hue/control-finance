@@ -26,10 +26,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ...event, value: Number(event.value || 0) })
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 })
+      return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })
     }
 
     console.error(error)
-    return NextResponse.json({ error: 'Não foi possível salvar o evento.' }, { status: 500 })
+    return NextResponse.json({ error: 'Nao foi possivel salvar o evento.' }, { status: 500 })
   }
 }

@@ -1,9 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { apiRequest } from '@/lib/api'
-import { formatBRL, formatDate, todayISO, addMonths } from '@/lib/utils/format'
-import type { Transaction, Installment, Category } from '@/lib/types'
+import { exportCSV } from '@/lib/utils/export'
+import { expandTransactionsForMonth } from '@/lib/utils/finance'
+import { formatBRL, formatDate, todayISO } from '@/lib/utils/format'
+import { useApp } from '@/components/layout/DashboardShell'
+import type { Category, Installment, Transaction } from '@/lib/types'
+
+type TransactionRecord = Transaction & { installments?: Installment[] }
 
 function toast(msg: string) {
   const t = document.createElement('div')
@@ -13,17 +19,31 @@ function toast(msg: string) {
   setTimeout(() => t.remove(), 3200)
 }
 
+function countMonthsInclusive(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T12:00:00`)
+  const end = new Date(`${endDate}T12:00:00`)
+  const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+  return Math.max(1, months)
+}
+
 export default function TransactionsClient({
-  initialTransactions, categories
+  initialTransactions,
+  categories,
 }: {
-  initialTransactions: (Transaction & { installments?: Installment[] })[]
+  initialTransactions: TransactionRecord[]
   categories: Category[]
 }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const { month, year } = useApp()
+
   const [txs, setTxs] = useState(initialTransactions)
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [srch, setSrch] = useState('')
-  const [ftype, setFtype] = useState('all')
-  const [frecur, setFrecur] = useState('all')
+  const [ftype, setFtype] = useState<'all' | 'income' | 'expense'>('all')
+  const [frecur, setFrecur] = useState<'all' | 'once' | 'installment' | 'monthly'>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [txType, setTxType] = useState<'income' | 'expense'>('expense')
   const [recMode, setRecMode] = useState<'once' | 'installment' | 'monthly'>('once')
@@ -31,328 +51,400 @@ export default function TransactionsClient({
   const [value, setValue] = useState('')
   const [date, setDate] = useState(todayISO())
   const [cat, setCat] = useState('')
-  const [parcelas, setParcelas] = useState('')
+  const [parcelas, setParcelas] = useState('12')
   const [diaVenc, setDiaVenc] = useState('')
-  const [durMonths, setDurMonths] = useState('')
+  const [endMode, setEndMode] = useState<'end' | 'no_end'>('end')
+  const [endDate, setEndDate] = useState(todayISO())
   const [saving, setSaving] = useState(false)
 
-  const expCats = categories.filter(c => c.type === 'expense' || c.type === 'both')
-  const incCats = categories.filter(c => c.type === 'income' || c.type === 'both')
+  const expCats = categories.filter(category => category.type === 'expense' || category.type === 'both')
+  const incCats = categories.filter(category => category.type === 'income' || category.type === 'both')
   const curCats = txType === 'income' ? incCats : expCats
 
-  const filtered = txs.filter(t =>
-    (!srch || t.description.toLowerCase().includes(srch.toLowerCase()) || t.category.toLowerCase().includes(srch.toLowerCase())) &&
-    (ftype === 'all' || t.type === ftype) &&
-    (frecur === 'all' || t.rec_mode === frecur)
+  useEffect(() => {
+    const typeFilter = searchParams.get('type')
+    if (typeFilter === 'income' || typeFilter === 'expense') {
+      setFtype(typeFilter)
+    } else {
+      setFtype('all')
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return
+    openNew()
+    const nextParams = new URLSearchParams(searchParams.toString())
+    nextParams.delete('new')
+    router.replace(nextParams.toString() ? `${pathname}?${nextParams.toString()}` : pathname)
+  }, [pathname, router, searchParams])
+
+  const filtered = useMemo(() => txs.filter(transaction =>
+    (!srch || transaction.description.toLowerCase().includes(srch.toLowerCase()) || transaction.category.toLowerCase().includes(srch.toLowerCase())) &&
+    (ftype === 'all' || transaction.type === ftype) &&
+    (frecur === 'all' || transaction.rec_mode === frecur),
+  ), [txs, srch, ftype, frecur])
+
+  const monthRows = useMemo(
+    () => expandTransactionsForMonth(txs, year, month),
+    [txs, year, month],
   )
 
-  function getCat(name: string) {
-    return categories.find(c => c.name === name) || { emoji: '📦', color: '#555' }
+  function openNew() {
+    setEditingId(null)
+    setShowModal(true)
+    setExpandedId(null)
+    setTxType(searchParams.get('type') === 'income' ? 'income' : 'expense')
+    setRecMode('once')
+    setDesc('')
+    setValue('')
+    setDate(todayISO())
+    setCat('')
+    setParcelas('12')
+    setDiaVenc('')
+    setEndMode('end')
+    setEndDate(todayISO())
+  }
+
+  function openEdit(transaction: TransactionRecord) {
+    setEditingId(transaction.id)
+    setShowModal(true)
+    setTxType(transaction.type)
+    setRecMode(transaction.rec_mode)
+    setDesc(transaction.description)
+    setValue(String(transaction.value))
+    setDate(transaction.date)
+    setCat(transaction.category)
+    setParcelas(String(transaction.total_parcelas || 12))
+    setDiaVenc(transaction.dia_venc ? String(transaction.dia_venc) : '')
+    if (transaction.rec_mode === 'monthly' && transaction.dur_months) {
+      setEndMode('end')
+      const end = new Date(`${transaction.date}T12:00:00`)
+      end.setMonth(end.getMonth() + transaction.dur_months - 1)
+      setEndDate(end.toISOString().split('T')[0])
+    } else {
+      setEndMode('no_end')
+      setEndDate(transaction.date)
+    }
+  }
+
+  function closeModal() {
+    setShowModal(false)
+    setEditingId(null)
+  }
+
+  async function reloadTransactions() {
+    const response = await apiRequest<{ transactions: TransactionRecord[] }>('/api/transactions', {
+      method: 'GET',
+    })
+    setTxs(response.transactions || [])
   }
 
   async function save() {
-    const val = parseFloat(value)
-    if (!desc || isNaN(val) || val <= 0 || !date) {
-      alert('Preencha todos os campos.')
+    const totalValue = parseFloat(value)
+    if (!desc || isNaN(totalValue) || totalValue <= 0 || !date) {
+      alert('Preencha descricao, valor e data inicial.')
       return
     }
+
+    if (recMode === 'installment' && Number(parcelas) < 2) {
+      alert('Informe pelo menos 2 parcelas.')
+      return
+    }
+
+    const category = cat || curCats[0]?.name || 'Outros'
+    const payload: any = {
+      description: desc,
+      value: totalValue,
+      type: txType,
+      category,
+      rec_mode: recMode,
+      date,
+    }
+
+    if (recMode === 'installment') {
+      payload.total_parcelas = Number(parcelas)
+      payload.dia_venc = diaVenc ? Number(diaVenc) : null
+    }
+
+    if (recMode === 'monthly') {
+      payload.dia_venc = diaVenc ? Number(diaVenc) : new Date(`${date}T12:00:00`).getDate()
+      payload.dur_months = endMode === 'end' ? countMonthsInclusive(date, endDate) : null
+    }
+
     setSaving(true)
     try {
-      const category = cat || curCats[0]?.name || 'Outros'
-      const txPayload: any = { description: desc, value: val, type: txType, category, rec_mode: recMode, date }
-      if (recMode === 'installment') {
-        txPayload.total_parcelas = parseInt(parcelas)
-        txPayload.dia_venc = parseInt(diaVenc) || null
-      }
-      if (recMode === 'monthly') {
-        txPayload.dia_venc = parseInt(diaVenc) || new Date(date + 'T12:00').getDate()
-        if (durMonths) txPayload.dur_months = parseInt(durMonths)
-      }
-
-      const data = await apiRequest<{ transactions: (Transaction & { installments?: Installment[] })[] }>('/api/transactions', {
-        method: 'POST',
-        body: JSON.stringify(txPayload),
-      })
-
-      if (recMode === 'installment') {
-        toast(`${parseInt(parcelas)} parcelas criadas no calendario`)
-      } else if (recMode === 'monthly') {
-        toast('Lancamento mensal criado')
+      if (editingId) {
+        await apiRequest<{ ok: true }>(`/api/transactions/${editingId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        })
+        toast('Transacao atualizada')
+        await reloadTransactions()
       } else {
-        toast('Transacao salva')
+        const response = await apiRequest<{ transactions: TransactionRecord[] }>('/api/transactions', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        })
+        setTxs(response.transactions || [])
+        toast(recMode === 'monthly' ? 'Recorrencia criada' : 'Transacao criada')
+        closeModal()
+        setSaving(false)
+        return
       }
 
-      setTxs(data.transactions || [])
-      setShowModal(false)
-      resetForm()
-    } catch (e: any) {
-      alert(e.message)
+      closeModal()
+    } catch (error: any) {
+      alert(error.message)
     } finally {
       setSaving(false)
     }
   }
 
-  function resetForm() {
-    setDesc('')
-    setValue('')
-    setDate(todayISO())
-    setCat('')
-    setParcelas('')
-    setDiaVenc('')
-    setDurMonths('')
-    setRecMode('once')
-    setTxType('expense')
-  }
-
-  async function markPaid(txId: string, instN: number) {
-    const tx = txs.find(t => t.id === txId)
-    if (!tx?.installments) return
-    const inst = tx.installments.find(p => p.n === instN)
-    if (!inst) return
-    await apiRequest<Installment>(`/api/installments/${inst.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ paid: !inst.paid }),
-    })
-    setTxs(prev => prev.map(t => t.id !== txId ? t : { ...t, installments: t.installments?.map(p => p.n !== instN ? p : { ...p, paid: !p.paid }) }))
-  }
-
-  async function rollover(txId: string, instN: number) {
-    const tx = txs.find(t => t.id === txId)
-    if (!tx?.installments) return
-    const inst = tx.installments.find(p => p.n === instN)
-    if (!inst || inst.paid) return
-    const newDate = addMonths(inst.date, 1)
-    await apiRequest<Installment>(`/api/installments/${inst.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        date: newDate,
-        rolled_over: (inst.rolled_over || 0) + 1,
-        transaction_id: txId,
-        installment_n: instN,
-      }),
-    })
-    setTxs(prev => prev.map(t => t.id !== txId ? t : { ...t, installments: t.installments?.map(p => p.n !== instN ? p : { ...p, date: newDate, rolled_over: (p.rolled_over || 0) + 1 }) }))
-    toast(`Parcela ${instN} adiada para ${new Date(newDate + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}`)
-  }
-
-  async function rolloverAll(txId: string) {
-    const tx = txs.find(t => t.id === txId)
-    if (!tx?.installments) return
-    const today2 = todayISO()
-    const overdue = tx.installments.filter(p => !p.paid && p.date < today2)
-    for (const p of overdue) await rollover(txId, p.n)
-  }
-
   async function delTx(id: string) {
-    if (!confirm('Excluir esta transacao e todas as parcelas?')) return
+    if (!confirm('Excluir esta transacao e todos os lancamentos vinculados?')) return
     await apiRequest<{ ok: true }>(`/api/transactions/${id}`, { method: 'DELETE' })
-    setTxs(prev => prev.filter(t => t.id !== id))
-    toast('Transacao excluida')
+    setTxs(prev => prev.filter(transaction => transaction.id !== id))
+    toast('Transacao removida')
   }
 
-  const today2 = todayISO()
+  async function markPaid(txId: string, installmentId: string, currentValue: boolean) {
+    await apiRequest(`/api/installments/${installmentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ paid: !currentValue }),
+    })
+    setTxs(prev => prev.map(transaction => (
+      transaction.id !== txId
+        ? transaction
+        : {
+            ...transaction,
+            installments: (transaction.installments || []).map(installment => (
+              installment.id === installmentId
+                ? { ...installment, paid: !currentValue }
+                : installment
+            )),
+          }
+    )))
+  }
+
+  function exportMonthCsv() {
+    exportCSV(
+      monthRows.map(row => ({
+        ...row,
+      })),
+      `finance-control-${year}-${String(month + 1).padStart(2, '0')}.csv`,
+    )
+  }
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-        <h1 className="font-bebas" style={{ fontSize: '22px', letterSpacing: '2px', color: 'var(--text)' }}>Transacoes & Parcelamentos</h1>
-        <button className="btn-primary" onClick={() => { resetForm(); setShowModal(true) }}>+ Nova</button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', gap: '12px', flexWrap: 'wrap' }}>
+        <h1 className="font-bebas" style={{ fontSize: '28px', letterSpacing: '2px', color: 'var(--text)' }}>Transacoes</h1>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button className="btn-ghost" onClick={exportMonthCsv}>Exportar CSV do mes</button>
+          <button className="btn-primary" onClick={openNew}>+ Nova transacao</button>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '9px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <input className="fi" style={{ maxWidth: '220px' }} placeholder="Buscar..." value={srch} onChange={e => setSrch(e.target.value)} />
-        <select className="fi" style={{ maxWidth: '140px' }} value={ftype} onChange={e => setFtype(e.target.value)}>
-          <option value="all">Todos</option><option value="income">Receitas</option><option value="expense">Despesas</option>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px', marginBottom: '18px' }}>
+        <div className="card" style={{ padding: '16px' }}>
+          <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text3)', marginBottom: '6px' }}>Lancamentos no mes</div>
+          <div className="font-bebas" style={{ fontSize: '32px' }}>{monthRows.length}</div>
+        </div>
+        <div className="card" style={{ padding: '16px' }}>
+          <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text3)', marginBottom: '6px' }}>Receitas no mes</div>
+          <div className="hide-val font-bebas" style={{ fontSize: '32px', color: 'var(--green)' }}>
+            <span>{formatBRL(monthRows.filter(row => row.type === 'income').reduce((sum, row) => sum + row.value, 0))}</span>
+          </div>
+        </div>
+        <div className="card" style={{ padding: '16px' }}>
+          <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text3)', marginBottom: '6px' }}>Despesas no mes</div>
+          <div className="hide-val font-bebas" style={{ fontSize: '32px', color: 'var(--red)' }}>
+            <span>{formatBRL(monthRows.filter(row => row.type === 'expense').reduce((sum, row) => sum + row.value, 0))}</span>
+          </div>
+        </div>
+        <div className="card" style={{ padding: '16px' }}>
+          <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text3)', marginBottom: '6px' }}>Recorrencias</div>
+          <div className="font-bebas" style={{ fontSize: '32px' }}>{txs.filter(item => item.rec_mode === 'monthly').length}</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <input className="fi" style={{ maxWidth: '230px' }} placeholder="Buscar descricao ou categoria..." value={srch} onChange={e => setSrch(e.target.value)} />
+        <select className="fi" style={{ maxWidth: '150px' }} value={ftype} onChange={e => setFtype(e.target.value as any)}>
+          <option value="all">Todos</option>
+          <option value="income">Receitas</option>
+          <option value="expense">Despesas</option>
         </select>
-        <select className="fi" style={{ maxWidth: '170px' }} value={frecur} onChange={e => setFrecur(e.target.value)}>
-          <option value="all">Todos os tipos</option>
+        <select className="fi" style={{ maxWidth: '170px' }} value={frecur} onChange={e => setFrecur(e.target.value as any)}>
+          <option value="all">Todas recorrencias</option>
           <option value="once">Avulso</option>
           <option value="installment">Parcelado</option>
-          <option value="monthly">Mensal fixo</option>
+          <option value="monthly">Recorrente</option>
         </select>
       </div>
 
       <div className="card">
         {filtered.length === 0 ? (
-          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text3)', fontSize: '12px' }}>Nenhuma transacao encontrada.</div>
-        ) : (
-          filtered.map(t => {
-            const c = getCat(t.category)
-            const paidCount = t.installments?.filter(p => p.paid).length || 0
-            const overdueCount = t.installments?.filter(p => !p.paid && p.date < today2).length || 0
-            const isExpanded = expandedId === t.id
+          <div style={{ padding: '28px', textAlign: 'center', color: 'var(--text3)' }}>Nenhuma transacao encontrada.</div>
+        ) : filtered.map((transaction) => {
+          const paidInstallments = (transaction.installments || []).filter(installment => installment.paid).length
+          const totalInstallments = transaction.installments?.length || 0
+          const isExpanded = expandedId === transaction.id
 
-            return (
-              <div key={t.id}>
-                <div style={{ display: 'grid', gridTemplateColumns: '34px 1fr auto auto', alignItems: 'center', gap: '10px', padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ width: '34px', height: '34px', borderRadius: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', background: 'var(--bg4)', border: '1px solid var(--border)', flexShrink: 0 }}>{c.emoji}</div>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text)', marginBottom: '3px' }}>{t.description}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-                      {t.rec_mode === 'installment' && <span style={{ fontSize: '9px', fontWeight: 700, background: 'rgba(179,136,255,.12)', color: 'var(--purple)', padding: '2px 5px', borderRadius: '4px' }}>[PARC] {t.total_parcelas}x {formatBRL((t.value || 0) / (t.total_parcelas || 1))}</span>}
-                      {t.rec_mode === 'monthly' && <span style={{ fontSize: '9px', fontWeight: 700, background: 'rgba(0,229,255,.1)', color: 'var(--cyan)', padding: '2px 5px', borderRadius: '4px' }}>[MENSAL]{t.dur_months ? ` - ${t.dur_months}x` : ''}</span>}
-                      {t.rec_mode === 'once' && <span style={{ fontSize: '9px', fontWeight: 700, background: 'var(--bg4)', color: 'var(--text3)', padding: '2px 5px', borderRadius: '4px' }}>Avulso</span>}
-                      {t.installments && <span style={{ fontSize: '10px', color: 'var(--text3)' }}>{paidCount}/{t.total_parcelas} pagas</span>}
-                      {overdueCount > 0 && <span style={{ fontSize: '10px', color: 'var(--red)', fontWeight: 600 }}>[ATENCAO] {overdueCount} vencida(s)</span>}
-                    </div>
+          return (
+            <div key={transaction.id} style={{ borderBottom: '1px solid var(--border)', padding: '16px 18px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '14px', alignItems: 'center' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                    <strong style={{ fontSize: '16px' }}>{transaction.description}</strong>
+                    <span className={transaction.type === 'income' ? 'badge-income' : 'badge-expense'}>
+                      {transaction.type === 'income' ? 'Receita' : 'Despesa'}
+                    </span>
+                    {transaction.rec_mode === 'monthly' && <span className="badge-income">Recorrente</span>}
+                    {transaction.rec_mode === 'installment' && <span className="badge-expense">Parcelado</span>}
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div className="hide-val" style={{ fontSize: '13px', fontWeight: 600, color: t.type === 'income' ? 'var(--green)' : 'var(--text)' }}>
-                      <span>{t.type === 'income' ? '+' : '-'}{formatBRL(t.value)}</span>
-                    </div>
-                    <div style={{ fontSize: '10px', color: 'var(--text3)' }}>{formatDate(t.date)}</div>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
-                    {t.installments && (
-                      <button onClick={() => setExpandedId(isExpanded ? null : t.id)} style={{ fontSize: '10px', padding: '2px 7px', border: '1px solid var(--border)', borderRadius: '5px', background: 'none', color: isExpanded ? 'var(--purple)' : 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit' }}>
-                        {isExpanded ? 'Fechar' : 'Ver parcelas'}
-                      </button>
+                  <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', color: 'var(--text2)', fontSize: '14px' }}>
+                    <span>{transaction.category}</span>
+                    <span>Inicio: {formatDate(transaction.date)}</span>
+                    <span className="hide-val">{formatBRL(transaction.value)}</span>
+                    {transaction.rec_mode === 'monthly' && (
+                      <span>{transaction.dur_months ? `Ate ${transaction.dur_months} mes(es)` : 'Sem data de termino'}</span>
                     )}
-                    <button onClick={() => delTx(t.id)} style={{ fontSize: '10px', padding: '2px 7px', border: '1px solid var(--border)', borderRadius: '5px', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit' }}>
-                      Excluir
-                    </button>
+                    {transaction.rec_mode === 'installment' && (
+                      <span>{paidInstallments}/{totalInstallments} parcelas pagas</span>
+                    )}
                   </div>
                 </div>
 
-                {isExpanded && t.installments && (
-                  <div style={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '12px 16px', marginBottom: '2px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                      <span style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '.5px', textTransform: 'uppercase', color: 'var(--text3)' }}>
-                        {t.total_parcelas} parcelas - {formatBRL(t.value / (t.total_parcelas || 1))} cada
-                      </span>
-                      {overdueCount > 0 && (
-                        <button onClick={() => rolloverAll(t.id)} style={{ fontSize: '10px', padding: '2px 10px', border: '1px solid var(--orange)', borderRadius: '5px', background: 'none', color: 'var(--orange)', cursor: 'pointer', fontFamily: 'inherit' }}>
-                          Adiar todas vencidas ({overdueCount})
-                        </button>
-                      )}
-                    </div>
-                    {t.installments.map(p => {
-                      const isOverdue = !p.paid && p.date < today2
-                      const status = p.paid ? 'paid' : isOverdue ? 'overdue' : 'pending'
-                      const statusTxt = p.paid ? 'Paga' : isOverdue ? 'Vencida' : 'Pendente'
-                      return (
-                        <div key={p.n} className="inst-row">
-                          <div className={`inst-num ${status}`}>{p.n}</div>
-                          <div style={{ flex: 1, fontSize: '11px', color: 'var(--text2)' }}>
-                            {new Date(p.date + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            {(p.rolled_over || 0) > 0 && <span style={{ fontSize: '9px', background: 'rgba(255,145,0,.12)', color: 'var(--orange)', padding: '1px 5px', borderRadius: '3px', marginLeft: '4px' }}>adiado {p.rolled_over}x</span>}
-                          </div>
-                          <div className="hide-val" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)' }}><span>{formatBRL(p.value)}</span></div>
-                          <span className={`inst-status ${status}`}>{statusTxt}</span>
-                          {!p.paid ? (
-                            <button onClick={() => markPaid(t.id, p.n)} style={{ fontSize: '10px', padding: '2px 7px', border: '1px solid var(--border2)', borderRadius: '4px', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '6px' }}>Pagar</button>
-                          ) : (
-                            <button onClick={() => markPaid(t.id, p.n)} style={{ fontSize: '10px', padding: '2px 7px', border: '1px solid var(--border)', borderRadius: '4px', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '6px' }}>Desfazer</button>
-                          )}
-                          {!p.paid && (
-                            <button onClick={() => rollover(t.id, p.n)} style={{ fontSize: '10px', padding: '2px 7px', border: '1px solid var(--border2)', borderRadius: '4px', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '4px' }}>Adiar</button>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {transaction.installments && transaction.installments.length > 0 && (
+                    <button className="btn-ghost" onClick={() => setExpandedId(isExpanded ? null : transaction.id)}>
+                      {isExpanded ? 'Ocultar parcelas' : 'Ver parcelas'}
+                    </button>
+                  )}
+                  <button className="btn-ghost" onClick={() => openEdit(transaction)}>Alterar</button>
+                  <button className="btn-primary" onClick={() => delTx(transaction.id)}>Excluir</button>
+                </div>
               </div>
-            )
-          })
-        )}
+
+              {isExpanded && (
+                <div style={{ marginTop: '14px', background: 'var(--bg4)', borderRadius: '14px', padding: '12px 14px' }}>
+                  {(transaction.installments || []).length === 0 ? (
+                    <div style={{ color: 'var(--text3)' }}>Este lancamento nao possui parcelas.</div>
+                  ) : (transaction.installments || []).map(installment => (
+                    <div key={installment.id} className="inst-row">
+                      <div className={`inst-num ${installment.paid ? 'paid' : installment.date < todayISO() ? 'overdue' : ''}`}>{installment.n}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600 }}>Vencimento {formatDate(installment.date)}</div>
+                        <div className="hide-val" style={{ color: 'var(--text2)' }}><span>{formatBRL(installment.value)}</span></div>
+                      </div>
+                      <span className={`inst-status ${installment.paid ? 'paid' : installment.date < todayISO() ? 'overdue' : 'pending'}`}>
+                        {installment.paid ? 'Paga' : installment.date < todayISO() ? 'Vencida' : 'Pendente'}
+                      </span>
+                      <button className="btn-ghost" onClick={() => markPaid(transaction.id, installment.id, installment.paid)}>
+                        {installment.paid ? 'Desfazer' : 'Marcar como paga'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) { setShowModal(false); resetForm() } }}>
-          <div className="modal-box" style={{ width: '480px' }}>
-            <div style={{ padding: '17px 22px 13px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: 'var(--bg2)', zIndex: 1 }}>
-              <span className="font-bebas" style={{ fontSize: '19px', letterSpacing: '2px' }}>Nova Transacao</span>
-              <button onClick={() => { setShowModal(false); resetForm() }} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '11px' }}>X</button>
+        <div className="modal-overlay" onClick={event => { if (event.target === event.currentTarget) closeModal() }}>
+          <div className="modal-box">
+            <div style={{ padding: '20px 22px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span className="font-bebas" style={{ fontSize: '24px' }}>{editingId ? 'Alterar transacao' : 'Nova transacao'}</span>
+              <button className="btn-ghost" onClick={closeModal}>Fechar</button>
             </div>
-            <div style={{ padding: '18px 22px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', background: 'var(--bg4)', padding: '3px', borderRadius: '8px', marginBottom: '14px', border: '1px solid var(--border)' }}>
-                {(['income', 'expense'] as const).map(tp => (
-                  <div key={tp} onClick={() => setTxType(tp)} style={{ padding: '7px', textAlign: 'center', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, background: txType === tp ? (tp === 'income' ? 'rgba(0,150,74,.12)' : 'rgba(217,0,32,.1)') : 'transparent', color: txType === tp ? (tp === 'income' ? 'var(--green)' : 'var(--red)') : 'var(--text3)' }}>
-                    {tp === 'income' ? 'Receita' : 'Despesa'}
-                  </div>
-                ))}
+
+            <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <button className={txType === 'income' ? 'btn-primary' : 'btn-ghost'} onClick={() => setTxType('income')}>Receita</button>
+                <button className={txType === 'expense' ? 'btn-primary' : 'btn-ghost'} onClick={() => setTxType('expense')}>Despesa</button>
               </div>
 
-              <div style={{ marginBottom: '13px' }}>
-                <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Descricao</label>
-                <input className="fi" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ex: Cartao Nubank, Salario..." />
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Descricao</label>
+                <input className="fi" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ex: Aluguel, cartao, salario..." />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '13px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Valor total (R$)</label>
-                  <input className="fi" type="number" min="0" step="0.01" value={value} onChange={e => setValue(e.target.value)} placeholder="0,00" />
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Valor</label>
+                  <input className="fi" type="number" step="0.01" min="0" value={value} onChange={e => setValue(e.target.value)} placeholder="0,00" />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Data</label>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Data de inicio</label>
                   <input className="fi" type="date" value={date} onChange={e => setDate(e.target.value)} />
                 </div>
               </div>
 
-              <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '6px' }}>Tipo de lancamento</label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '3px', background: 'var(--bg4)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                  {[{ key: 'once', l: 'Avulso', s: 'sem repeticao' }, { key: 'installment', l: 'Parcelado', s: 'N parcelas' }, { key: 'monthly', l: 'Mensal fixo', s: 'todo mes' }].map(r => (
-                    <div key={r.key} onClick={() => setRecMode(r.key as any)} style={{ padding: '7px 4px', textAlign: 'center', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 600, lineHeight: 1.2, background: recMode === r.key ? 'var(--bg2)' : 'transparent', color: recMode === r.key ? 'var(--text)' : 'var(--text3)' }}>
-                      {r.l}<br /><span style={{ fontSize: '9px', opacity: .6 }}>{r.s}</span>
-                    </div>
-                  ))}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Categoria</label>
+                  <select className="fi" value={cat} onChange={e => setCat(e.target.value)}>
+                    <option value="">Escolher automaticamente</option>
+                    {curCats.map(category => (
+                      <option key={category.id} value={category.name}>{category.emoji} {category.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Tipo de lancamento</label>
+                  <select className="fi" value={recMode} onChange={e => setRecMode(e.target.value as any)}>
+                    <option value="once">Avulso</option>
+                    <option value="installment">Parcelado</option>
+                    <option value="monthly">Recorrente</option>
+                  </select>
                 </div>
               </div>
 
-              {recMode === 'once' && (
-                <div style={{ marginBottom: '13px' }}>
-                  <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Categoria</label>
-                  <select className="fi" value={cat} onChange={e => setCat(e.target.value)}>
-                    {curCats.map(c => <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>)}
-                  </select>
-                </div>
-              )}
-
               {recMode === 'installment' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '13px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>No parcelas</label>
-                    <input className="fi" type="number" min="2" max="360" value={parcelas} onChange={e => setParcelas(e.target.value)} placeholder="Ex: 12" />
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Numero de parcelas</label>
+                    <input className="fi" type="number" min="2" max="360" value={parcelas} onChange={e => setParcelas(e.target.value)} />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Dia venc.</label>
-                    <input className="fi" type="number" min="1" max="31" value={diaVenc} onChange={e => setDiaVenc(e.target.value)} placeholder="Ex: 10" />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Categoria</label>
-                    <select className="fi" value={cat} onChange={e => setCat(e.target.value)}>
-                      {curCats.map(c => <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>)}
-                    </select>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Dia do vencimento</label>
+                    <input className="fi" type="number" min="1" max="31" value={diaVenc} onChange={e => setDiaVenc(e.target.value)} placeholder="Opcional" />
                   </div>
                 </div>
               )}
 
               {recMode === 'monthly' && (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '13px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Dia do mes</label>
+                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Dia recorrente</label>
                       <input className="fi" type="number" min="1" max="31" value={diaVenc} onChange={e => setDiaVenc(e.target.value)} placeholder="Ex: 5" />
                     </div>
                     <div>
-                      <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Categoria</label>
-                      <select className="fi" value={cat} onChange={e => setCat(e.target.value)}>
-                        {curCats.map(c => <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>)}
-                      </select>
+                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Fim da recorrencia</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <button className={endMode === 'end' ? 'btn-primary' : 'btn-ghost'} onClick={() => setEndMode('end')}>Com termino</button>
+                        <button className={endMode === 'no_end' ? 'btn-primary' : 'btn-ghost'} onClick={() => setEndMode('no_end')}>Sem termino</button>
+                      </div>
                     </div>
                   </div>
-                  <div style={{ marginBottom: '13px' }}>
-                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Meses de duracao (opcional)</label>
-                    <input className="fi" type="number" min="1" value={durMonths} onChange={e => setDurMonths(e.target.value)} placeholder="Deixe vazio = 12 meses" />
-                  </div>
+
+                  {endMode === 'end' && (
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Data de termino</label>
+                      <input className="fi" type="date" value={endDate} min={date} onChange={e => setEndDate(e.target.value)} />
+                    </div>
+                  )}
                 </>
               )}
             </div>
-            <div style={{ padding: '13px 22px', borderTop: '1px solid var(--border)', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button className="btn-ghost" onClick={() => { setShowModal(false); resetForm() }}>Cancelar</button>
-              <button className="btn-primary" onClick={save} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</button>
+
+            <div style={{ padding: '18px 22px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button className="btn-ghost" onClick={closeModal}>Cancelar</button>
+              <button className="btn-primary" onClick={save} disabled={saving}>{saving ? 'Salvando...' : editingId ? 'Salvar alteracoes' : 'Criar lancamento'}</button>
             </div>
           </div>
         </div>

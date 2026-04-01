@@ -5,10 +5,22 @@ import { apiRequest } from '@/lib/api'
 import { formatBRL, formatDate, todayISO } from '@/lib/utils/format'
 import type { IncomeSource } from '@/lib/types'
 
+const SOURCE_OPTIONS = [
+  'Salario CLT',
+  'Salario PJ',
+  'Freelance',
+  'Comissao',
+  'Bonus',
+  'Aluguel',
+  'Investimento',
+  'Beneficio',
+  'Outros',
+]
+
 function toast(msg: string) {
   const t = document.createElement('div')
   t.className = 'toast'
-  t.textContent = '✓ ' + msg
+  t.textContent = 'OK ' + msg
   document.body.appendChild(t)
   setTimeout(() => t.remove(), 3200)
 }
@@ -19,41 +31,41 @@ export default function IncomeClient({ initialSources }: { initialSources: Incom
   const [name, setName] = useState('')
   const [val, setVal] = useState('')
   const [day, setDay] = useState('')
-  const [type, setType] = useState('Salário CLT')
+  const [type, setType] = useState('Salario CLT')
   const [start, setStart] = useState(todayISO())
   const [saving, setSaving] = useState(false)
 
-  const total = sources.reduce((s, x) => s + x.value, 0)
+  const total = sources.reduce((sum, source) => sum + source.value, 0)
   const now = new Date()
-  const nextPayment = sources.map(s => {
-    let d = new Date(now.getFullYear(), now.getMonth(), s.day)
-    if (d <= now) d = new Date(now.getFullYear(), now.getMonth() + 1, s.day)
-    return { ...s, _next: d }
+  const nextPayment = sources.map(source => {
+    let date = new Date(now.getFullYear(), now.getMonth(), source.day)
+    if (date <= now) date = new Date(now.getFullYear(), now.getMonth() + 1, source.day)
+    return { ...source, _next: date }
   }).sort((a, b) => a._next.getTime() - b._next.getTime())[0]
 
   async function save() {
-    const v = parseFloat(val)
-    const d = parseInt(day)
-    if (!name || isNaN(v) || v <= 0 || !d) {
+    const value = parseFloat(val)
+    const paymentDay = parseInt(day)
+    if (!name || isNaN(value) || value <= 0 || !paymentDay) {
       alert('Preencha todos os campos.')
       return
     }
     setSaving(true)
     try {
-      const src = await apiRequest<IncomeSource>('/api/income-sources', {
+      const source = await apiRequest<IncomeSource>('/api/income-sources', {
         method: 'POST',
-        body: JSON.stringify({ name, value: v, day: d, source_type: type, start_date: start }),
+        body: JSON.stringify({ name, value, day: paymentDay, source_type: type, start_date: start }),
       })
-      setSources(prev => [...prev, src])
+      setSources(prev => [...prev, source])
       setShowModal(false)
       setName('')
       setVal('')
       setDay('')
-      setType('Salário CLT')
+      setType('Salario CLT')
       setStart(todayISO())
-      toast('Renda cadastrada - evento mensal criado automaticamente')
-    } catch (e: any) {
-      alert(e.message)
+      toast('Fonte de renda cadastrada')
+    } catch (error: any) {
+      alert(error.message)
     } finally {
       setSaving(false)
     }
@@ -62,86 +74,95 @@ export default function IncomeClient({ initialSources }: { initialSources: Incom
   async function del(id: string) {
     if (!confirm('Remover esta fonte de renda?')) return
     await apiRequest<{ ok: true }>(`/api/income-sources/${id}`, { method: 'DELETE' })
-    setSources(prev => prev.filter(s => s.id !== id))
+    setSources(prev => prev.filter(source => source.id !== id))
     toast('Fonte removida')
   }
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
-        <h1 className="font-bebas" style={{ fontSize: '22px', letterSpacing: '2px', color: 'var(--text)' }}>Minha Renda</h1>
-        <button className="btn-primary" onClick={() => setShowModal(true)}>+ Fonte de Renda</button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', gap: '12px', flexWrap: 'wrap' }}>
+        <div>
+          <h1 className="font-bebas" style={{ fontSize: '28px', letterSpacing: '2px', color: 'var(--text)' }}>Fontes de renda</h1>
+          <div style={{ color: 'var(--text3)', marginTop: '4px' }}>Cadastre salarios, freelas, investimentos e outras entradas fixas.</div>
+        </div>
+        <button className="btn-primary" onClick={() => setShowModal(true)}>+ Nova fonte</button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '18px' }}>
         <div className="card" style={{ padding: '18px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '10px' }}>Renda Mensal Total</div>
-          <div className="hide-val font-bebas" style={{ fontSize: '28px', color: 'var(--green)', marginBottom: '3px' }}><span>{formatBRL(total)}</span></div>
-          <div style={{ fontSize: '11px', color: 'var(--text3)' }}>{sources.length} fonte(s) cadastrada(s)</div>
+          <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '10px' }}>Renda mensal total</div>
+          <div className="hide-val font-bebas" style={{ fontSize: '34px', color: 'var(--green)', marginBottom: '6px' }}><span>{formatBRL(total)}</span></div>
+          <div style={{ fontSize: '14px', color: 'var(--text3)' }}>{sources.length} fonte(s) cadastrada(s)</div>
         </div>
         <div className="card" style={{ padding: '18px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '10px' }}>Próximo Recebimento</div>
-          <div className="hide-val font-bebas" style={{ fontSize: '28px', color: 'var(--text)', marginBottom: '3px' }}><span>{nextPayment ? formatBRL(nextPayment.value) : '-'}</span></div>
-          <div style={{ fontSize: '11px', color: 'var(--text3)' }}>{nextPayment ? `${nextPayment.name} - dia ${nextPayment.day} (${nextPayment._next.toLocaleDateString('pt-BR')})` : 'Nenhuma fonte cadastrada'}</div>
+          <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '10px' }}>Proximo recebimento</div>
+          <div className="hide-val font-bebas" style={{ fontSize: '34px', color: 'var(--text)', marginBottom: '6px' }}><span>{nextPayment ? formatBRL(nextPayment.value) : '-'}</span></div>
+          <div style={{ fontSize: '14px', color: 'var(--text3)' }}>{nextPayment ? `${nextPayment.name} - dia ${nextPayment.day} (${nextPayment._next.toLocaleDateString('pt-BR')})` : 'Nenhuma fonte cadastrada'}</div>
         </div>
       </div>
 
-      <div className="font-bebas" style={{ fontSize: '16px', letterSpacing: '2px', marginBottom: '10px', color: 'var(--text)' }}>Fontes de Renda</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {sources.length === 0 ? (
-          <div style={{ color: 'var(--text3)', fontSize: '12px', textAlign: 'center', padding: '22px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: '12px' }}>Nenhuma fonte cadastrada.</div>
-        ) : sources.map(s => (
-          <div key={s.id} className="card" style={{ padding: '11px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '32px', height: '32px', background: 'var(--bg4)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0, border: '1px solid var(--border)' }}>💼</div>
+          <div className="card" style={{ padding: '26px', textAlign: 'center', color: 'var(--text3)' }}>Nenhuma fonte cadastrada.</div>
+        ) : sources.map(source => (
+          <div key={source.id} className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '42px', height: '42px', background: 'var(--bg4)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0, border: '1px solid var(--border)' }}>R$</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{s.name}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text3)' }}>{s.source_type} · desde {formatDate(s.start_date)}</div>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)' }}>{source.name}</div>
+              <div style={{ fontSize: '13px', color: 'var(--text3)' }}>{source.source_type} - desde {formatDate(source.start_date)}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div className="hide-val" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--green)' }}><span>{formatBRL(s.value)}/mês</span></div>
-              <div style={{ fontSize: '10px', color: 'var(--text3)' }}>Recebe dia {s.day}</div>
+              <div className="hide-val" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--green)' }}><span>{formatBRL(source.value)}/mes</span></div>
+              <div style={{ fontSize: '12px', color: 'var(--text3)' }}>Recebe dia {source.day}</div>
             </div>
-            <button onClick={() => del(s.id)} style={{ width: '24px', height: '24px', background: 'none', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text3)', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text3)')}>×</button>
+            <button className="btn-ghost" onClick={() => del(source.id)}>Excluir</button>
           </div>
         ))}
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
-          <div className="modal-box" style={{ width: '430px' }}>
-            <div style={{ padding: '17px 22px 13px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span className="font-bebas" style={{ fontSize: '19px', letterSpacing: '2px' }}>Fonte de Renda</span>
-              <button onClick={() => setShowModal(false)} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '11px' }}>×</button>
+        <div className="modal-overlay" onClick={event => { if (event.target === event.currentTarget) setShowModal(false) }}>
+          <div className="modal-box">
+            <div style={{ padding: '20px 22px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span className="font-bebas" style={{ fontSize: '24px' }}>Fonte de renda</span>
+              <button className="btn-ghost" onClick={() => setShowModal(false)}>Fechar</button>
             </div>
-            <div style={{ padding: '18px 22px' }}>
-              <div style={{ marginBottom: '13px' }}>
-                <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Nome / Origem</label>
-                <input className="fi" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Empresa X, Freelance..." />
+
+            <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Nome / origem</label>
+                <input className="fi" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Empresa, cliente, corretora..." />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '13px' }}>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Valor Mensal (R$)</label>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Valor mensal</label>
                   <input className="fi" type="number" min="0" step="0.01" value={val} onChange={e => setVal(e.target.value)} placeholder="0,00" />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Dia de recebimento</label>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Dia de recebimento</label>
                   <input className="fi" type="number" min="1" max="31" value={day} onChange={e => setDay(e.target.value)} placeholder="Ex: 5" />
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Tipo</label>
-                  <select className="fi" value={type} onChange={e => setType(e.target.value)}>
-                    <option>Salário CLT</option><option>Salário PJ</option><option>Freelance</option><option>Aluguel</option><option>Investimento</option><option>Outros</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Ativo desde</label>
-                  <input className="fi" type="date" value={start} onChange={e => setStart(e.target.value)} />
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Tipo da fonte</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {SOURCE_OPTIONS.map(option => (
+                    <button key={option} className={type === option ? 'btn-primary' : 'btn-ghost'} onClick={() => setType(option)}>
+                      {option}
+                    </button>
+                  ))}
                 </div>
               </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Ativo desde</label>
+                <input className="fi" type="date" value={start} onChange={e => setStart(e.target.value)} />
+              </div>
             </div>
-            <div style={{ padding: '13px 22px', borderTop: '1px solid var(--border)', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+
+            <div style={{ padding: '18px 22px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button className="btn-ghost" onClick={() => setShowModal(false)}>Cancelar</button>
               <button className="btn-primary" onClick={save} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</button>
             </div>

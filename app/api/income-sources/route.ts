@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     const sourceId = crypto.randomUUID()
     const eventId = crypto.randomUUID()
 
-    const statements = [
+    await sql.transaction([
       sql`
         insert into income_sources (id, user_id, name, value, day, source_type, start_date)
         values (
@@ -33,12 +33,10 @@ export async function POST(request: Request) {
           'income',
           'monthly',
           ${Number(body.day || 1)},
-          'Salário'
+          'Renda'
         )
       `,
-    ]
-
-    await sql.transaction(statements)
+    ])
 
     return NextResponse.json({
       id: sourceId,
@@ -51,10 +49,10 @@ export async function POST(request: Request) {
     })
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 })
+      return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })
     }
 
     console.error(error)
-    return NextResponse.json({ error: 'Não foi possível salvar a fonte de renda.' }, { status: 500 })
+    return NextResponse.json({ error: 'Nao foi possivel salvar a fonte de renda.' }, { status: 500 })
   }
 }

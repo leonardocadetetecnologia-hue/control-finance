@@ -1,98 +1,76 @@
 'use client'
 
 import { useMemo } from 'react'
+import { expandTransactionsForMonth } from '@/lib/utils/finance'
 import { formatBRL, formatDate, MONTHS } from '@/lib/utils/format'
-import type { Transaction, Installment, Category } from '@/lib/types'
+import { useApp } from '@/components/layout/DashboardShell'
+import type { Category, Installment, Transaction } from '@/lib/types'
 
-export default function DashboardClient({ transactions, categories }: {
+export default function DashboardClient({
+  transactions,
+  categories,
+}: {
   transactions: (Transaction & { installments?: Installment[] })[]
   categories: Category[]
 }) {
-  const now = new Date()
-  const month = now.getMonth()
-  const year  = now.getFullYear()
+  const { month, year } = useApp()
 
-  function getCat(name: string) { return categories.find(c => c.name === name) || { emoji: '📦', color: '#555' } }
+  function getCategory(name: string) {
+    return categories.find(category => category.name === name) || { emoji: '📦', color: '#555' }
+  }
 
-  const monthTx = useMemo(() =>
-    transactions.filter(t => {
-      const d = new Date(t.date + 'T12:00')
-      return d.getMonth() === month && d.getFullYear() === year
-    }), [transactions, month, year])
+  const monthRows = useMemo(() => expandTransactionsForMonth(transactions, year, month), [transactions, year, month])
+  const income = monthRows.filter(row => row.type === 'income').reduce((sum, row) => sum + row.value, 0)
+  const expenses = monthRows.filter(row => row.type === 'expense').reduce((sum, row) => sum + row.value, 0)
 
-  const income   = monthTx.filter(t => t.type === 'income').reduce((s, t) => s + t.value, 0)
-  const expenses = monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + t.value, 0)
+  const categoryTotals = Object.entries(monthRows
+    .filter(row => row.type === 'expense')
+    .reduce<Record<string, number>>((acc, row) => {
+      acc[row.category] = (acc[row.category] || 0) + row.value
+      return acc
+    }, {}),
+  ).sort((a, b) => b[1] - a[1])
 
-  // Bar chart by week
-  const dim = new Date(year, month + 1, 0).getDate()
-  const weeks = Array.from({ length: Math.ceil(dim / 7) }, (_, w) => {
-    const s0 = w * 7 + 1, e0 = Math.min(s0 + 6, dim)
-    const wt = monthTx.filter(t => { const d = new Date(t.date + 'T12:00').getDate(); return d >= s0 && d <= e0 })
-    return {
-      label: `S${w + 1}`,
-      inc:  wt.filter(t => t.type === 'income').reduce((s, t) => s + t.value, 0),
-      exp:  wt.filter(t => t.type === 'expense' && t.rec_mode !== 'installment').reduce((s, t) => s + t.value, 0),
-      inst: wt.filter(t => t.rec_mode === 'installment').reduce((s, t) => s + t.value, 0),
-    }
-  })
-  const maxW = Math.max(1, ...weeks.flatMap(w => [w.inc, w.exp + w.inst]))
-
-  // Category breakdown
-  const catTotals: Record<string, number> = {}
-  monthTx.filter(t => t.type === 'expense').forEach(t => catTotals[t.category] = (catTotals[t.category] || 0) + t.value)
-  const catSorted = Object.entries(catTotals).sort((a, b) => b[1] - a[1])
-  const catTotal  = catSorted.reduce((s, [, v]) => s + v, 0)
-
-  const recent = monthTx.slice(0, 5)
+  const recent = monthRows.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6)
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 316px', gap: '16px', marginBottom: '18px' }}>
-        {/* Chart */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', marginBottom: '18px' }}>
         <div className="card" style={{ padding: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-            <span className="font-bebas" style={{ fontSize: '16px', letterSpacing: '2px', color: 'var(--text)' }}>Fluxo do Mês</span>
-            <span style={{ fontSize: '11px', color: 'var(--text3)' }}>{MONTHS[month]} {year}</span>
+            <span className="font-bebas" style={{ fontSize: '20px', letterSpacing: '2px' }}>Resumo do mes</span>
+            <span style={{ color: 'var(--text3)' }}>{MONTHS[month]} {year}</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '5px', height: '130px' }}>
-            {weeks.map((w, i) => (
-              <div key={i} style={{ flex: 1, display: 'flex', gap: '3px', alignItems: 'flex-end' }}>
-                <div style={{ flex: 1, background: 'var(--green)', borderRadius: '4px 4px 0 0', height: `${Math.max(3, Math.round((w.inc / maxW) * 120))}px`, opacity: .85 }} title={formatBRL(w.inc)} />
-                <div style={{ flex: 1, background: 'var(--red)', borderRadius: '4px 4px 0 0', height: `${Math.max(3, Math.round((w.exp / maxW) * 120))}px`, opacity: .65 }} title={formatBRL(w.exp)} />
-                <div style={{ flex: 1, background: 'var(--purple)', borderRadius: '4px 4px 0 0', height: `${Math.max(w.inst > 0 ? 3 : 0, Math.round((w.inst / maxW) * 120))}px`, opacity: .7 }} title={formatBRL(w.inst)} />
-              </div>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: '2px', marginTop: '5px' }}>
-            {weeks.map((w, i) => <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: '10px', color: 'var(--text3)' }}>{w.label}</div>)}
-          </div>
-          <div style={{ display: 'flex', gap: '14px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
-            {[{ c: 'var(--green)', l: 'Receitas' }, { c: 'var(--red)', l: 'Despesas', op: .7 }, { c: 'var(--purple)', l: 'Parcelas' }].map(x => (
-              <div key={x.l} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text2)' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: x.c, opacity: x.op || 1 }} />{x.l}
-              </div>
-            ))}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
+            <div className="card" style={{ padding: '16px', background: 'var(--bg4)' }}>
+              <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text3)', marginBottom: '6px' }}>Receitas</div>
+              <div className="hide-val font-bebas" style={{ fontSize: '30px', color: 'var(--green)' }}><span>{formatBRL(income)}</span></div>
+            </div>
+            <div className="card" style={{ padding: '16px', background: 'var(--bg4)' }}>
+              <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text3)', marginBottom: '6px' }}>Despesas</div>
+              <div className="hide-val font-bebas" style={{ fontSize: '30px', color: 'var(--red)' }}><span>{formatBRL(expenses)}</span></div>
+            </div>
+            <div className="card" style={{ padding: '16px', background: 'var(--bg4)' }}>
+              <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text3)', marginBottom: '6px' }}>Saldo</div>
+              <div className="hide-val font-bebas" style={{ fontSize: '30px', color: income - expenses >= 0 ? 'var(--green)' : 'var(--red)' }}><span>{formatBRL(income - expenses)}</span></div>
+            </div>
           </div>
         </div>
 
-        {/* Categories */}
         <div className="card">
-          <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid var(--border)', fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>Por Categoria</div>
-          <div style={{ padding: '14px 16px' }}>
-            {catSorted.length === 0 ? (
-              <div style={{ color: 'var(--text3)', fontSize: '12px', textAlign: 'center', padding: '20px 0' }}>Nenhuma despesa ainda</div>
-            ) : catSorted.map(([cat, val]) => {
-              const c = getCat(cat)
-              const pct = catTotal > 0 ? Math.round((val / catTotal) * 100) : 0
+          <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', fontSize: '16px', fontWeight: 700 }}>Despesas por categoria</div>
+          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {categoryTotals.length === 0 ? (
+              <div style={{ color: 'var(--text3)', textAlign: 'center', padding: '18px 0' }}>Nenhuma despesa neste mes.</div>
+            ) : categoryTotals.map(([categoryName, value]) => {
+              const category = getCategory(categoryName)
               return (
-                <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '9px' }}>
-                  <div style={{ width: '7px', height: '7px', borderRadius: '2px', flexShrink: 0, background: c.color }} />
-                  <div style={{ flex: 1, fontSize: '12px', color: 'var(--text2)' }}>{cat}</div>
-                  <div style={{ flex: 2, height: '3px', background: 'var(--bg4)', borderRadius: '2px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: c.color, borderRadius: '2px' }} />
-                  </div>
-                  <div className="hide-val" style={{ fontSize: '12px', fontWeight: 500, minWidth: '68px', textAlign: 'right', color: 'var(--text)' }}>
-                    <span>{formatBRL(val)}</span>
+                <div key={categoryName} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '38px', height: '38px', borderRadius: '12px', background: `${category.color}22`, border: `1px solid ${category.color}55`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{category.emoji}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700 }}>{categoryName}</div>
+                    <div className="hide-val" style={{ color: 'var(--text3)', marginTop: '2px' }}><span>{formatBRL(value)}</span></div>
                   </div>
                 </div>
               )
@@ -101,28 +79,25 @@ export default function DashboardClient({ transactions, categories }: {
         </div>
       </div>
 
-      {/* Recent */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-        <span className="font-bebas" style={{ fontSize: '18px', letterSpacing: '2px', color: 'var(--text)' }}>Últimas Transações</span>
-        <a href="/transactions" style={{ fontSize: '12px', color: 'var(--text3)', textDecoration: 'none' }}>Ver todas →</a>
+        <span className="font-bebas" style={{ fontSize: '20px', letterSpacing: '2px' }}>Ultimos lancamentos do mes</span>
+        <a href="/transactions" style={{ fontSize: '14px', color: 'var(--text3)', textDecoration: 'none' }}>Ver todas</a>
       </div>
+
       <div className="card">
         {recent.length === 0 ? (
-          <div style={{ padding: '22px', textAlign: 'center', color: 'var(--text3)', fontSize: '12px' }}>Nenhuma transação este mês.</div>
-        ) : recent.map(t => {
-          const c = getCat(t.category)
+          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text3)' }}>Nenhum lancamento neste mes.</div>
+        ) : recent.map((row, index) => {
+          const category = getCategory(row.category)
           return (
-            <div key={t.id} style={{ display: 'grid', gridTemplateColumns: '34px 1fr auto', alignItems: 'center', gap: '10px', padding: '9px 16px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ width: '34px', height: '34px', borderRadius: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', background: 'var(--bg4)', border: '1px solid var(--border)', flexShrink: 0 }}>{c.emoji}</div>
+            <div key={`${row.date}-${row.description}-${index}`} style={{ display: 'grid', gridTemplateColumns: '48px 1fr auto', alignItems: 'center', gap: '12px', padding: '14px 16px', borderBottom: index === recent.length - 1 ? 'none' : '1px solid var(--border)' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: `${category.color}22`, border: `1px solid ${category.color}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>{category.emoji}</div>
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text)' }}>{t.description}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text3)' }}>{t.category}</div>
+                <div style={{ fontSize: '16px', fontWeight: 700 }}>{row.description}</div>
+                <div style={{ fontSize: '13px', color: 'var(--text3)' }}>{row.category} - {formatDate(row.date)}</div>
               </div>
-              <div>
-                <div className="hide-val" style={{ fontSize: '13px', fontWeight: 600, textAlign: 'right', color: t.type === 'income' ? 'var(--green)' : 'var(--text)' }}>
-                  <span>{t.type === 'income' ? '+' : '-'}{formatBRL(t.value)}</span>
-                </div>
-                <div style={{ fontSize: '10px', color: 'var(--text3)', textAlign: 'right' }}>{formatDate(t.date)}</div>
+              <div className="hide-val" style={{ fontSize: '16px', fontWeight: 700, color: row.type === 'income' ? 'var(--green)' : 'var(--text)' }}>
+                <span>{row.type === 'income' ? '+' : '-'}{formatBRL(row.value)}</span>
               </div>
             </div>
           )
