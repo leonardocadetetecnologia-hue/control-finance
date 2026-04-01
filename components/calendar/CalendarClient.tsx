@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { apiRequest } from '@/lib/api'
 import { formatBRL, MONTHS } from '@/lib/utils/format'
-import { buildGCalUrl } from '@/lib/utils/gcal'
+import { buildGCalUrl, downloadFinanceCalendarIcs } from '@/lib/utils/gcal'
+import { formatMoneyInput, parseMoneyInput, sanitizeMoneyDraft } from '@/lib/utils/money'
 import type { CalendarEvent } from '@/lib/types'
 
 type EventKind = 'payment' | 'receipt' | 'reminder_charge' | 'reminder_receive'
@@ -36,6 +37,12 @@ function getEventLabel(event: CalendarEvent) {
   if (kind === 'reminder_charge') return 'Cobrar'
   if (kind === 'reminder_receive') return 'Receber'
   return kind === 'receipt' ? 'Recebimento' : 'Pagamento'
+}
+
+function getEventDateForMonth(event: CalendarEvent, year: number, month: number) {
+  if (event.date) return event.date
+  const day = String(Math.min(event.day || 1, 28)).padStart(2, '0')
+  return `${year}-${String(month + 1).padStart(2, '0')}-${day}`
 }
 
 export default function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent[] }) {
@@ -121,9 +128,14 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
   }
 
   async function saveEvent() {
-    const value = Number(evVal || 0)
+    const rawValue = evVal.trim()
+    const value = rawValue ? parseMoneyInput(rawValue) : 0
     if (!evDesc.trim()) {
       alert('Informe a descricao do evento.')
+      return
+    }
+    if (rawValue && (!Number.isFinite(value) || value < 0)) {
+      alert('Informe um valor no formato de reais.')
       return
     }
     if (!isReminder(eventKind) && value <= 0) {
@@ -180,6 +192,31 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
     await apiRequest<{ ok: true }>(`/api/events/${id}`, { method: 'DELETE' })
     setEvents(prev => prev.filter(event => event.id !== id))
     toast('Evento removido')
+  }
+
+  function exportMonthToGoogleCalendar() {
+    const items = upcomingEvents.map(event => {
+      const eventDate = getEventDateForMonth(event, year, month)
+      const label = getEventLabel(event)
+      const amount = event.value ? `Valor: ${formatBRL(event.value)}` : 'Lembrete sem valor'
+      return {
+        id: event.id,
+        title: `${label}: ${event.description}`,
+        date: eventDate,
+        description: `${label} do Finance Control. ${amount}`,
+      }
+    })
+
+    if (items.length === 0) {
+      alert('Nao ha eventos neste mes para exportar.')
+      return
+    }
+
+    downloadFinanceCalendarIcs(
+      items,
+      `finance-control-google-agenda-${year}-${String(month + 1).padStart(2, '0')}.ics`,
+    )
+    toast('Arquivo .ics gerado para importar no Google Agenda')
   }
 
   return (
@@ -242,7 +279,10 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
         <div className="card" style={{ flex: 1 }}>
           <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '15px', fontWeight: 700 }}>Eventos do mes</span>
-            <button className="btn-primary" onClick={() => openDay(newDay)}>+ Evento</button>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button className="btn-ghost" onClick={exportMonthToGoogleCalendar}>Google Agenda (.ics)</button>
+              <button className="btn-primary" onClick={() => openDay(newDay)}>+ Evento</button>
+            </div>
           </div>
           <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '420px', overflowY: 'auto' }}>
             {upcomingEvents.length === 0 ? (
@@ -306,7 +346,14 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>
                     {isReminder(eventKind) ? 'Valor estimado (opcional)' : 'Valor'}
                   </label>
-                  <input className="fi" type="number" step="0.01" min="0" value={evVal} onChange={e => setEvVal(e.target.value)} placeholder="0,00" />
+                  <input
+                    className="fi"
+                    inputMode="decimal"
+                    value={evVal}
+                    onChange={e => setEvVal(sanitizeMoneyDraft(e.target.value))}
+                    onBlur={() => setEvVal(current => formatMoneyInput(current))}
+                    placeholder="0,00"
+                  />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Recorrencia</label>

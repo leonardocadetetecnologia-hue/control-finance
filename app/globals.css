@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&family=Open+Sans:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -26,6 +26,21 @@
   --input-bg: #1c1c1c;
   --modal-bg: rgba(0, 0, 0, 0.8);
   --scrollbar: #333333;
+  --page-background: radial-gradient(circle at top left, rgba(232, 255, 0, 0.06), transparent 26%), radial-gradient(circle at top right, rgba(0, 229, 255, 0.08), transparent 22%), linear-gradient(180deg, #0b0b0c 0%, #090909 100%);
+  --header-bg: rgba(17, 17, 17, 0.92);
+  --header-border: var(--border);
+  --metric-bg: var(--bg4);
+  --card-bg: var(--bg2);
+  --reminder-bg: linear-gradient(135deg, rgba(255, 145, 0, 0.12), rgba(0, 0, 0, 0)), var(--bg4);
+  --font-body: 'Space Grotesk', sans-serif;
+  --font-heading: 'Bebas Neue', sans-serif;
+  --heading-letter: 0.1em;
+  --radius-xl: 18px;
+  --radius-lg: 14px;
+  --radius-md: 12px;
+  --card-shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
+  --header-shadow: 0 14px 30px var(--shadow);
+  --button-shadow: none;
 }
 
 [data-theme="light"] {
@@ -49,6 +64,136 @@
   --input-bg: #f8f8fb;
   --modal-bg: rgba(0, 0, 0, 0.4);
   --scrollbar: #d4d4dc;
+  --page-background: radial-gradient(circle at top left, rgba(17, 17, 17, 0.04), transparent 26%), linear-gradient(180deg, #f7f7fa 0%, #efeff4 100%);
+  --header-bg: rgba(255, 255, 255, 0.92);
+  --header-border: var(--border);
+  --metric-bg: var(--bg2);
+  --card-bg: var(--bg2);
+  --reminder-bg: linear-gradient(135deg, rgba(201, 96, 0, 0.14), rgba(255, 255, 255, 0.9));
+  --font-body: 'Space Grotesk', sans-serif;
+  --font-heading: 'Bebas Neue', sans-serif;
+  --heading-letter: 0.1em;
+  --radius-xl: 18px;
+  --radius-lg: 14px;
+  --radius-md: 12px;
+  --card-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --header-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --button-shadow: none;
+}
+
+[data-theme="company"] {
+  --bg: #f3ede2;
+  --bg2: rgba(255, 251, 245, 0.8);
+  --bg3: #ffffff;
+  --bg4: #ece3d3;
+  --border: rgba(42, 56, 64, 0.12);
+  --border2: rgba(42, 56, 64, 0.18);
+  --text: #1b2a33;
+  --text2: #53626c;
+  --text3: #91a0aa;
+  --accent: #193a4a;
+  --accent-text: #f7efe3;
+  --green: #157f66;
+  --red: #b75045;
+  --purple: #6f7cbf;
+  --orange: #cf9341;
+  --cyan: #286b91;
+  --shadow: rgba(24, 36, 43, 0.1);
+  --input-bg: rgba(255, 255, 255, 0.92);
+  --modal-bg: rgba(17, 27, 34, 0.32);
+  --scrollbar: #c9c4bb;
+  --page-background: radial-gradient(circle at top left, rgba(207, 147, 65, 0.2), transparent 24%), radial-gradient(circle at top right, rgba(25, 58, 74, 0.08), transparent 22%), linear-gradient(180deg, #fbf7ef 0%, #f2ecdf 100%);
+  --header-bg: rgba(251, 246, 238, 0.88);
+  --header-border: rgba(25, 58, 74, 0.08);
+  --metric-bg: rgba(255, 255, 255, 0.72);
+  --card-bg: rgba(255, 255, 255, 0.76);
+  --reminder-bg: linear-gradient(135deg, rgba(207, 147, 65, 0.22), rgba(255, 255, 255, 0.74));
+  --font-body: 'Manrope', sans-serif;
+  --font-heading: 'Manrope', sans-serif;
+  --heading-letter: 0.04em;
+  --radius-xl: 28px;
+  --radius-lg: 20px;
+  --radius-md: 16px;
+  --card-shadow: 0 18px 40px rgba(25, 58, 74, 0.08);
+  --header-shadow: 0 14px 40px rgba(25, 58, 74, 0.08);
+  --button-shadow: 0 10px 24px rgba(25, 58, 74, 0.12);
+}
+
+[data-theme="elementor-2026"] {
+  --bg: #060b19;
+  --bg2: rgba(7, 12, 26, 0.82);
+  --bg3: #0e1730;
+  --bg4: rgba(16, 25, 49, 0.88);
+  --border: rgba(122, 252, 255, 0.12);
+  --border2: rgba(139, 92, 246, 0.24);
+  --text: #edf7ff;
+  --text2: #a0b7d9;
+  --text3: #627391;
+  --accent: #7afcff;
+  --accent-text: #03141d;
+  --green: #59ffba;
+  --red: #ff6f91;
+  --purple: #8b5cf6;
+  --orange: #ffd166;
+  --cyan: #00d9ff;
+  --shadow: rgba(0, 0, 0, 0.4);
+  --input-bg: rgba(14, 21, 40, 0.96);
+  --modal-bg: rgba(2, 7, 17, 0.7);
+  --scrollbar: #29405d;
+  --page-background: radial-gradient(circle at 12% 12%, rgba(122, 252, 255, 0.14), transparent 18%), radial-gradient(circle at 82% 10%, rgba(139, 92, 246, 0.2), transparent 20%), radial-gradient(circle at 50% 100%, rgba(0, 217, 255, 0.12), transparent 30%), linear-gradient(180deg, #091020 0%, #050913 100%);
+  --header-bg: rgba(6, 10, 24, 0.72);
+  --header-border: rgba(122, 252, 255, 0.14);
+  --metric-bg: linear-gradient(180deg, rgba(14, 24, 46, 0.92), rgba(9, 16, 32, 0.92));
+  --card-bg: linear-gradient(180deg, rgba(14, 22, 41, 0.9), rgba(9, 14, 28, 0.92));
+  --reminder-bg: linear-gradient(135deg, rgba(255, 209, 102, 0.18), rgba(18, 26, 52, 0.92));
+  --font-body: 'Space Grotesk', sans-serif;
+  --font-heading: 'Space Grotesk', sans-serif;
+  --heading-letter: 0.04em;
+  --radius-xl: 24px;
+  --radius-lg: 18px;
+  --radius-md: 14px;
+  --card-shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
+  --header-shadow: 0 16px 46px rgba(0, 0, 0, 0.22);
+  --button-shadow: 0 0 0 1px rgba(122, 252, 255, 0.08), 0 0 26px rgba(122, 252, 255, 0.15);
+}
+
+[data-theme="portfolio"] {
+  --bg: #f5f0e8;
+  --bg2: rgba(255, 255, 255, 0.85);
+  --bg3: #ffffff;
+  --bg4: #efe7dd;
+  --border: rgba(28, 28, 28, 0.12);
+  --border2: rgba(28, 28, 28, 0.2);
+  --text: #171717;
+  --text2: #545454;
+  --text3: #8b857f;
+  --accent: #ff6b3d;
+  --accent-text: #fff8f3;
+  --green: #0a8a5b;
+  --red: #c93d1f;
+  --purple: #6b4cff;
+  --orange: #ff8a00;
+  --cyan: #0f7f9c;
+  --shadow: rgba(0, 0, 0, 0.08);
+  --input-bg: rgba(255, 255, 255, 0.9);
+  --modal-bg: rgba(17, 17, 17, 0.36);
+  --scrollbar: #c5bdb5;
+  --page-background: linear-gradient(90deg, rgba(23, 23, 23, 0.05) 1px, transparent 1px), linear-gradient(180deg, rgba(23, 23, 23, 0.03) 1px, transparent 1px), linear-gradient(180deg, #f7f2eb 0%, #f2ece4 100%);
+  --page-background-size: 120px 120px, 120px 120px, auto;
+  --header-bg: rgba(247, 242, 235, 0.92);
+  --header-border: rgba(23, 23, 23, 0.08);
+  --metric-bg: rgba(255, 255, 255, 0.66);
+  --card-bg: rgba(255, 255, 255, 0.78);
+  --reminder-bg: linear-gradient(135deg, rgba(255, 107, 61, 0.16), rgba(255, 255, 255, 0.86));
+  --font-body: 'Open Sans', sans-serif;
+  --font-heading: 'Oswald', sans-serif;
+  --heading-letter: 0.06em;
+  --radius-xl: 12px;
+  --radius-lg: 10px;
+  --radius-md: 8px;
+  --card-shadow: 0 12px 26px rgba(23, 23, 23, 0.06);
+  --header-shadow: 0 10px 24px rgba(23, 23, 23, 0.08);
+  --button-shadow: none;
 }
 
 * {
@@ -60,9 +205,9 @@
 html,
 body {
   min-height: 100%;
-  background: var(--bg);
+  background: var(--page-background);
   color: var(--text);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 16px;
   transition: background 0.22s, color 0.22s;
 }
@@ -72,8 +217,9 @@ body {
 }
 
 .font-bebas {
-  font-family: 'Bebas Neue', sans-serif;
-  letter-spacing: 0.1em;
+  font-family: var(--font-heading);
+  letter-spacing: var(--heading-letter);
+  font-weight: 700;
 }
 
 ::-webkit-scrollbar {
@@ -92,16 +238,18 @@ body {
 
 .shell-page {
   min-height: 100vh;
-  background: var(--bg);
+  background: var(--page-background);
+  background-size: var(--page-background-size, auto);
 }
 
 .shell-header {
   position: sticky;
   top: 0;
   z-index: 80;
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 14px 30px var(--shadow);
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--header-border);
+  box-shadow: var(--header-shadow);
+  backdrop-filter: blur(16px);
 }
 
 .shell-topline,
@@ -162,14 +310,14 @@ body {
 
 .shell-icon-btn,
 .logout-btn,
-.theme-pill,
+.theme-select,
 .shell-nav-item {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
 }
 
 .shell-icon-btn {
   height: 42px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border2);
   background: transparent;
   color: var(--text2);
@@ -186,27 +334,32 @@ body {
 .theme-switch {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: var(--bg4);
+  gap: 10px;
+  background: var(--metric-bg);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 4px;
+  border-radius: var(--radius-lg);
+  padding: 6px 10px;
 }
 
-.theme-pill {
-  border: 0;
-  background: transparent;
-  color: var(--text2);
-  border-radius: 10px;
+.theme-switch-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+}
+
+.theme-select {
+  min-width: 185px;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--text);
+  border-radius: calc(var(--radius-md) - 2px);
   padding: 8px 12px;
   font-size: 13px;
   font-weight: 600;
+  outline: none;
   cursor: pointer;
-}
-
-.theme-pill.active {
-  background: var(--bg2);
-  color: var(--text);
 }
 
 .logout-btn {
@@ -216,7 +369,7 @@ body {
   border: 1px solid var(--border2);
   background: transparent;
   color: var(--text2);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   padding: 7px 14px 7px 10px;
   font-size: 14px;
   font-weight: 600;
@@ -256,10 +409,11 @@ body {
 
 .metric-chip {
   min-height: 82px;
-  background: var(--bg4);
+  background: var(--metric-bg);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
   padding: 14px 16px;
+  box-shadow: var(--card-shadow);
 }
 
 .metric-label {
@@ -297,10 +451,11 @@ body {
 }
 
 .reminder-card {
-  background: linear-gradient(135deg, rgba(255, 145, 0, 0.12), rgba(0, 0, 0, 0)) , var(--bg4);
+  background: var(--reminder-bg);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
   padding: 14px 16px;
+  box-shadow: var(--card-shadow);
 }
 
 .reminder-title {
@@ -354,13 +509,14 @@ body {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  background: var(--bg4);
+  background: var(--metric-bg);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
   padding: 10px 12px;
   color: var(--text2);
   font-size: 15px;
   font-weight: 600;
+  box-shadow: var(--card-shadow);
 }
 
 .shell-nav {
@@ -375,7 +531,7 @@ body {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text2);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   padding: 10px 15px;
   font-size: 14px;
   font-weight: 600;
@@ -396,10 +552,11 @@ body {
 }
 
 .card {
-  background: var(--bg2);
+  background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
   transition: background 0.22s;
+  box-shadow: var(--card-shadow);
 }
 
 [data-theme='light'] .card {
@@ -411,13 +568,14 @@ body {
   color: var(--accent-text);
   border: none;
   padding: 10px 17px;
-  border-radius: 12px;
-  font-family: 'Space Grotesk', sans-serif;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   transition: opacity 0.15s;
   white-space: nowrap;
+  box-shadow: var(--button-shadow);
 }
 
 .btn-primary:hover {
@@ -429,8 +587,8 @@ body {
   color: var(--text2);
   border: 1px solid var(--border2);
   padding: 10px 15px;
-  border-radius: 12px;
-  font-family: 'Space Grotesk', sans-serif;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -447,10 +605,10 @@ body {
   width: 100%;
   background: var(--input-bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 11px 13px;
   color: var(--text);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-body);
   font-size: 14px;
   outline: none;
   transition: border-color 0.15s;
@@ -478,9 +636,9 @@ select.fi {
 }
 
 .modal-box {
-  background: var(--bg2);
+  background: var(--card-bg);
   border: 1px solid var(--border2);
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
   width: 520px;
   max-width: 95vw;
   max-height: 92vh;

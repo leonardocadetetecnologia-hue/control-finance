@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server'
 import { requireUserId } from '@/lib/auth-helpers'
 import { sql } from '@/lib/db'
+import { parseMoneyInput } from '@/lib/utils/money'
 
 export async function POST(request: Request) {
   try {
     const userId = await requireUserId()
     const body = await request.json()
+    const rawValue = String(body.value ?? '').trim()
+    const parsedValue = rawValue ? parseMoneyInput(body.value) : 0
+
+    if (rawValue && (!Number.isFinite(parsedValue) || parsedValue < 0)) {
+      return NextResponse.json({ error: 'Informe um valor valido.' }, { status: 400 })
+    }
 
     const [event] = await sql`
       insert into events (id, user_id, description, value, type, repeat, day, date, category)
@@ -13,7 +20,7 @@ export async function POST(request: Request) {
         ${crypto.randomUUID()},
         ${userId},
         ${String(body.description || '').trim()},
-        ${Number(body.value || 0)},
+        ${parsedValue},
         ${String(body.type || 'expense')},
         ${String(body.repeat || 'once')},
         ${body.day ? Number(body.day) : null},

@@ -1,14 +1,20 @@
 import { NextResponse } from 'next/server'
 import { requireUserId } from '@/lib/auth-helpers'
 import { sql } from '@/lib/db'
+import { parseMoneyInput } from '@/lib/utils/money'
 
 export async function POST(request: Request) {
   try {
     const userId = await requireUserId()
     const body = await request.json()
+    const value = parseMoneyInput(body.value)
 
     const sourceId = crypto.randomUUID()
     const eventId = crypto.randomUUID()
+
+    if (!String(body.name || '').trim() || !Number.isFinite(value) || value <= 0) {
+      return NextResponse.json({ error: 'Preencha nome e valor valido.' }, { status: 400 })
+    }
 
     await sql.transaction([
       sql`
@@ -17,7 +23,7 @@ export async function POST(request: Request) {
           ${sourceId},
           ${userId},
           ${String(body.name || '').trim()},
-          ${Number(body.value || 0)},
+          ${value},
           ${Number(body.day || 1)},
           ${String(body.source_type || 'Outros')},
           ${String(body.start_date || new Date().toISOString().split('T')[0])}
@@ -29,7 +35,7 @@ export async function POST(request: Request) {
           ${eventId},
           ${userId},
           ${String(body.name || '').trim()},
-          ${Number(body.value || 0)},
+          ${value},
           'income',
           'monthly',
           ${Number(body.day || 1)},
@@ -42,7 +48,7 @@ export async function POST(request: Request) {
       id: sourceId,
       user_id: userId,
       name: String(body.name || '').trim(),
-      value: Number(body.value || 0),
+      value,
       day: Number(body.day || 1),
       source_type: String(body.source_type || 'Outros'),
       start_date: String(body.start_date || new Date().toISOString().split('T')[0]),

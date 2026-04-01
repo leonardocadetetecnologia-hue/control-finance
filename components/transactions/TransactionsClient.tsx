@@ -6,6 +6,7 @@ import { apiRequest } from '@/lib/api'
 import { exportCSV } from '@/lib/utils/export'
 import { expandTransactionsForMonth } from '@/lib/utils/finance'
 import { formatBRL, formatDate, todayISO } from '@/lib/utils/format'
+import { formatMoneyInput, parseMoneyInput, sanitizeMoneyDraft } from '@/lib/utils/money'
 import { useApp } from '@/components/layout/DashboardShell'
 import type { Category, Installment, Transaction } from '@/lib/types'
 
@@ -111,7 +112,7 @@ export default function TransactionsClient({
     setTxType(transaction.type)
     setRecMode(transaction.rec_mode)
     setDesc(transaction.description)
-    setValue(String(transaction.value))
+    setValue(formatMoneyInput(transaction.value))
     setDate(transaction.date)
     setCat(transaction.category)
     setParcelas(String(transaction.total_parcelas || 12))
@@ -140,8 +141,8 @@ export default function TransactionsClient({
   }
 
   async function save() {
-    const totalValue = parseFloat(value)
-    if (!desc || isNaN(totalValue) || totalValue <= 0 || !date) {
+    const totalValue = parseMoneyInput(value)
+    if (!desc || !Number.isFinite(totalValue) || totalValue <= 0 || !date) {
       alert('Preencha descricao, valor e data inicial.')
       return
     }
@@ -375,7 +376,14 @@ export default function TransactionsClient({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Valor</label>
-                  <input className="fi" type="number" step="0.01" min="0" value={value} onChange={e => setValue(e.target.value)} placeholder="0,00" />
+                  <input
+                    className="fi"
+                    inputMode="decimal"
+                    value={value}
+                    onChange={e => setValue(sanitizeMoneyDraft(e.target.value))}
+                    onBlur={() => setValue(current => formatMoneyInput(current))}
+                    placeholder="0,00"
+                  />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Data de inicio</label>

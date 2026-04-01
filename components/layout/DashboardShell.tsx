@@ -14,10 +14,20 @@ interface AppCtx {
   setYear: (year: number) => void
   hidden: boolean
   toggleHidden: () => void
+  theme: string
+  setTheme: (theme: string) => void
 }
 
 const AppContext = createContext<AppCtx>({} as AppCtx)
 export const useApp = () => useContext(AppContext)
+
+const THEMES = [
+  { id: 'dark', label: 'Finance Dark' },
+  { id: 'light', label: 'Finance Light' },
+  { id: 'company', label: 'The7 Company' },
+  { id: 'elementor-2026', label: 'Elementor 2026' },
+  { id: 'portfolio', label: 'Portfolio One Page' },
+]
 
 const NAV = [
   { href: '/', label: 'Dashboard' },
@@ -107,7 +117,7 @@ export default function DashboardShell({
   const expenseMode = pathname === '/transactions' && searchParams.get('type') === 'expense'
 
   return (
-    <AppContext.Provider value={{ month, year, setMonth, setYear, hidden, toggleHidden }}>
+    <AppContext.Provider value={{ month, year, setMonth, setYear, hidden, toggleHidden, theme, setTheme: changeTheme }}>
       <div className="shell-page">
         <header className="shell-header">
           <div className="shell-topline">
@@ -130,8 +140,12 @@ export default function DashboardShell({
                 {hidden ? 'Mostrar' : 'Ocultar'}
               </button>
               <div className="theme-switch">
-                <button className={`theme-pill${theme === 'dark' ? ' active' : ''}`} onClick={() => changeTheme('dark')}>Escuro</button>
-                <button className={`theme-pill${theme === 'light' ? ' active' : ''}`} onClick={() => changeTheme('light')}>Claro</button>
+                <div className="theme-switch-label">Tema</div>
+                <select className="theme-select" value={theme} onChange={(event) => changeTheme(event.target.value)}>
+                  {THEMES.map((item) => (
+                    <option key={item.id} value={item.id}>{item.label}</option>
+                  ))}
+                </select>
               </div>
               <button className="logout-btn" onClick={logout}>
                 <span className="logout-avatar">{(user.email || 'U').slice(0, 1).toUpperCase()}</span>

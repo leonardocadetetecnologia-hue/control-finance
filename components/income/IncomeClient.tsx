@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { apiRequest } from '@/lib/api'
 import { formatBRL, formatDate, todayISO } from '@/lib/utils/format'
+import { formatMoneyInput, parseMoneyInput, sanitizeMoneyDraft } from '@/lib/utils/money'
 import type { IncomeSource } from '@/lib/types'
 
 const SOURCE_OPTIONS = [
@@ -44,9 +45,9 @@ export default function IncomeClient({ initialSources }: { initialSources: Incom
   }).sort((a, b) => a._next.getTime() - b._next.getTime())[0]
 
   async function save() {
-    const value = parseFloat(val)
+    const value = parseMoneyInput(val)
     const paymentDay = parseInt(day)
-    if (!name || isNaN(value) || value <= 0 || !paymentDay) {
+    if (!name || !Number.isFinite(value) || value <= 0 || !paymentDay) {
       alert('Preencha todos os campos.')
       return
     }
@@ -137,7 +138,14 @@ export default function IncomeClient({ initialSources }: { initialSources: Incom
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Valor mensal</label>
-                  <input className="fi" type="number" min="0" step="0.01" value={val} onChange={e => setVal(e.target.value)} placeholder="0,00" />
+                  <input
+                    className="fi"
+                    inputMode="decimal"
+                    value={val}
+                    onChange={e => setVal(sanitizeMoneyDraft(e.target.value))}
+                    onBlur={() => setVal(current => formatMoneyInput(current))}
+                    placeholder="0,00"
+                  />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Dia de recebimento</label>

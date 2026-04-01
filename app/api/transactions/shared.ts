@@ -18,6 +18,10 @@ function monthlyEventDate(startDate: string, offset: number, dueDay: number) {
   return eventDate.toISOString().split('T')[0]
 }
 
+function parcelDescription(description: string, current: number, total: number) {
+  return `${description} - parcela ${String(current).padStart(2, '0')}/${String(total).padStart(2, '0')}`
+}
+
 export function buildTransactionStatements(userId: string, transactionId: string, payload: TransactionPayload) {
   const statements: any[] = [
     sql`
@@ -46,7 +50,7 @@ export function buildTransactionChildStatements(userId: string, transactionId: s
         `,
         sql`
           insert into events (id, user_id, transaction_id, installment_n, description, value, type, repeat, day, date, category)
-          values (${crypto.randomUUID()}, ${userId}, ${transactionId}, ${index + 1}, ${`${index + 1}/${payload.totalParcelas} ${payload.description}`}, ${perValue}, ${payload.type}, 'once', ${dueDay}, ${isoDate}, ${payload.category})
+          values (${crypto.randomUUID()}, ${userId}, ${transactionId}, ${index + 1}, ${parcelDescription(payload.description, index + 1, payload.totalParcelas)}, ${perValue}, ${payload.type}, 'once', ${dueDay}, ${isoDate}, ${payload.category})
         `,
       )
     }
@@ -59,9 +63,12 @@ export function buildTransactionChildStatements(userId: string, transactionId: s
     if (payload.durMonths && payload.durMonths > 0) {
       for (let index = 0; index < payload.durMonths; index += 1) {
         const isoDate = monthlyEventDate(payload.date, index, dueDay)
+        const description = payload.type === 'expense'
+          ? parcelDescription(payload.description, index + 1, payload.durMonths)
+          : payload.description
         statements.push(sql`
-          insert into events (id, user_id, transaction_id, description, value, type, repeat, day, date, category)
-          values (${crypto.randomUUID()}, ${userId}, ${transactionId}, ${payload.description}, ${payload.value}, ${payload.type}, 'once', ${dueDay}, ${isoDate}, ${payload.category})
+          insert into events (id, user_id, transaction_id, installment_n, description, value, type, repeat, day, date, category)
+          values (${crypto.randomUUID()}, ${userId}, ${transactionId}, ${index + 1}, ${description}, ${payload.value}, ${payload.type}, 'once', ${dueDay}, ${isoDate}, ${payload.category})
         `)
       }
     } else {
