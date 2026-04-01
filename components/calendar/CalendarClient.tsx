@@ -7,37 +7,48 @@ import { buildGCalUrl } from '@/lib/utils/gcal'
 import type { CalendarEvent } from '@/lib/types'
 
 function toast(msg: string) {
-  const t = document.createElement('div'); t.className = 'toast'; t.textContent = 'âœ“ ' + msg
-  document.body.appendChild(t); setTimeout(() => t.remove(), 3200)
+  const t = document.createElement('div')
+  t.className = 'toast'
+  t.textContent = 'OK ' + msg
+  document.body.appendChild(t)
+  setTimeout(() => t.remove(), 3200)
 }
 
 export default function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent[] }) {
   const now = new Date()
   const [month, setMonth] = useState(now.getMonth())
-  const [year, setYear]   = useState(now.getFullYear())
+  const [year, setYear] = useState(now.getFullYear())
   const [events, setEvents] = useState(initialEvents)
   const [gcalConnected, setGcalConnected] = useState(false)
   const [showEventModal, setShowEventModal] = useState(false)
   const [newDay, setNewDay] = useState(1)
 
-  const [evType, setEvType] = useState<'income'|'expense'>('expense')
+  const [evType, setEvType] = useState<'income' | 'expense'>('expense')
   const [evDesc, setEvDesc] = useState('')
-  const [evVal,  setEvVal]  = useState('')
-  const [evDay,  setEvDay]  = useState('')
+  const [evVal, setEvVal] = useState('')
+  const [evDay, setEvDay] = useState('')
   const [evDate, setEvDate] = useState('')
-  const [evRepeat, setEvRepeat] = useState<'once'|'monthly'|'yearly'>('once')
+  const [evRepeat, setEvRepeat] = useState<'once' | 'monthly' | 'yearly'>('once')
   const [saving, setSaving] = useState(false)
 
   function changeMonth(d: number) {
-    let m = month + d, y = year
-    if (m > 11) { m = 0; y++ }
-    if (m < 0)  { m = 11; y-- }
-    setMonth(m); setYear(y)
+    let m = month + d
+    let y = year
+    if (m > 11) {
+      m = 0
+      y++
+    }
+    if (m < 0) {
+      m = 11
+      y--
+    }
+    setMonth(m)
+    setYear(y)
   }
 
-  const dim      = new Date(year, month + 1, 0).getDate()
+  const dim = new Date(year, month + 1, 0).getDate()
   const firstDow = new Date(year, month, 1).getDay()
-  const prevDim  = new Date(year, month, 0).getDate()
+  const prevDim = new Date(year, month, 0).getDate()
 
   const evMap: Record<number, CalendarEvent[]> = {}
   events.forEach(ev => {
@@ -56,7 +67,10 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
   })
 
   const upcomingEvs = events.filter(ev => {
-    if (ev.date) { const ed = new Date(ev.date + 'T12:00'); return ed.getMonth() === month && ed.getFullYear() === year }
+    if (ev.date) {
+      const ed = new Date(ev.date + 'T12:00')
+      return ed.getMonth() === month && ed.getFullYear() === year
+    }
     return ev.repeat === 'monthly' || ev.repeat === 'yearly'
   }).sort((a, b) => {
     const da = a.date ? new Date(a.date + 'T12:00').getDate() : a.day || 1
@@ -73,7 +87,10 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
 
   async function saveEvent() {
     const val = parseFloat(evVal)
-    if (!evDesc || isNaN(val) || val <= 0) { alert('Preencha todos os campos.'); return }
+    if (!evDesc || isNaN(val) || val <= 0) {
+      alert('Preencha todos os campos.')
+      return
+    }
     setSaving(true)
     try {
       const payload: any = { description: evDesc, value: val, type: evType, repeat: evRepeat, category: 'Outros' }
@@ -89,10 +106,19 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
       setShowEventModal(false)
       toast('Evento salvo')
       if (gcalConnected) {
-        const url = buildGCalUrl({ title: (evType === 'income' ? 'â†‘ Receber: ' : 'â†“ Pagar: ') + evDesc + ' (' + formatBRL(val) + ')', date: evDate || `${year}-${String(month+1).padStart(2,'0')}-${String(parseInt(evDay)||1).padStart(2,'0')}`, description: `Valor: ${formatBRL(val)}\nCriado pelo Finance Control.`, recurrence: evRepeat === 'monthly' ? 'MONTHLY' : undefined })
+        const url = buildGCalUrl({
+          title: `${evType === 'income' ? 'Receber' : 'Pagar'}: ${evDesc} (${formatBRL(val)})`,
+          date: evDate || `${year}-${String(month + 1).padStart(2, '0')}-${String(parseInt(evDay) || 1).padStart(2, '0')}`,
+          description: `Valor: ${formatBRL(val)}\nCriado pelo Finance Control.`,
+          recurrence: evRepeat === 'monthly' ? 'MONTHLY' : undefined,
+        })
         window.open(url, '_blank')
       }
-    } catch (e: any) { alert(e.message) } finally { setSaving(false) }
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function delEvent(id: string) {
@@ -107,12 +133,12 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
           <span className="font-bebas" style={{ fontSize: '16px', letterSpacing: '2px', color: 'var(--text)' }}>{MONTHS[month]} {year}</span>
           <div style={{ display: 'flex', gap: '5px' }}>
-            <button onClick={() => changeMonth(-1)} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '13px' }}>â€¹</button>
-            <button onClick={() => changeMonth(1)}  style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '13px' }}>â€º</button>
+            <button onClick={() => changeMonth(-1)} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '13px' }}>{'<'}</button>
+            <button onClick={() => changeMonth(1)} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '13px' }}>{'>'}</button>
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)' }}>
-          {['Dom','Seg','Ter','Qua','Qui','Sex','SÃ¡b'].map(d => (
+          {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(d => (
             <div key={d} style={{ textAlign: 'center', fontSize: '10px', fontWeight: 600, letterSpacing: '.8px', color: 'var(--text3)', padding: '8px 0', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>{d}</div>
           ))}
         </div>
@@ -129,7 +155,7 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
                 <div className="day-num">{d}</div>
                 {dayEvs.slice(0, 3).map((ev, idx) => (
                   <div key={idx} className={`day-evt ${ev.type}${ev.transaction_id ? ' installment' : ''}`}>
-                    {ev.type === 'income' ? 'â†‘' : 'â†“'} {ev.description.slice(0, 9)}
+                    {ev.type === 'income' ? '+' : '-'} {ev.description.slice(0, 9)}
                   </div>
                 ))}
                 {dayEvs.length > 3 && <div style={{ fontSize: '9px', color: 'var(--text3)' }}>+{dayEvs.length - 3}</div>}
@@ -144,38 +170,42 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div className="card" style={{ padding: '14px 16px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '10px' }}>Google CalendÃ¡rio</div>
-          <button onClick={() => { if (gcalConnected) { setGcalConnected(false); toast('Google Agenda desconectado') } else if (confirm('Conectar com Google Agenda?\n\n(Em produÃ§Ã£o: OAuth 2.0 real)')) { setGcalConnected(true); toast('Google Agenda conectado') } }} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg4)', border: `1px solid ${gcalConnected ? 'var(--green)' : 'var(--border)'}`, borderRadius: '9px', padding: '10px 12px', cursor: 'pointer', fontSize: '12px', color: gcalConnected ? 'var(--green)' : 'var(--text2)', width: '100%', transition: 'all .15s', fontFamily: 'inherit' }}>
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="1" y="2" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.2"/><path d="M5 1V3M10 1V3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M1 6H14" stroke="currentColor" strokeWidth="1.2"/></svg>
-            {gcalConnected ? 'âœ“ Google Agenda conectado' : 'Conectar Google Agenda'}
+          <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '10px' }}>Google Calendario</div>
+          <button onClick={() => { if (gcalConnected) { setGcalConnected(false); toast('Google Agenda desconectado') } else if (confirm('Conectar com Google Agenda?\n\n(Em producao: OAuth 2.0 real)')) { setGcalConnected(true); toast('Google Agenda conectado') } }} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg4)', border: `1px solid ${gcalConnected ? 'var(--green)' : 'var(--border)'}`, borderRadius: '9px', padding: '10px 12px', cursor: 'pointer', fontSize: '12px', color: gcalConnected ? 'var(--green)' : 'var(--text2)', width: '100%', transition: 'all .15s', fontFamily: 'inherit' }}>
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="1" y="2" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.2" /><path d="M5 1V3M10 1V3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /><path d="M1 6H14" stroke="currentColor" strokeWidth="1.2" /></svg>
+            {gcalConnected ? 'OK Google Agenda conectado' : 'Conectar Google Agenda'}
           </button>
         </div>
 
         <div className="card" style={{ flex: 1 }}>
           <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>Eventos do MÃªs</span>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>Eventos do Mes</span>
             <span style={{ fontSize: '10px', color: 'var(--text3)' }}>{MONTHS[month]}</span>
           </div>
           <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '7px', maxHeight: '280px', overflowY: 'auto' }}>
             {upcomingEvs.length === 0 ? (
-              <div style={{ color: 'var(--text3)', fontSize: '12px', textAlign: 'center', padding: '16px 0' }}>Nenhum evento neste mÃªs.</div>
+              <div style={{ color: 'var(--text3)', fontSize: '12px', textAlign: 'center', padding: '16px 0' }}>Nenhum evento neste mes.</div>
             ) : upcomingEvs.map(ev => {
               const d = ev.date ? new Date(ev.date + 'T12:00').getDate() : ev.day || 1
-              const gcUrl = buildGCalUrl({ title: (ev.type === 'income' ? 'â†‘ Receber: ' : 'â†“ Pagar: ') + ev.description + ' (' + formatBRL(ev.value) + ')', date: ev.date || `${year}-${String(month+1).padStart(2,'0')}-${String(Math.min(d,28)).padStart(2,'0')}`, description: `Valor: ${formatBRL(ev.value)}\nCriado pelo Finance Control.` })
+              const gcUrl = buildGCalUrl({
+                title: `${ev.type === 'income' ? 'Receber' : 'Pagar'}: ${ev.description} (${formatBRL(ev.value)})`,
+                date: ev.date || `${year}-${String(month + 1).padStart(2, '0')}-${String(Math.min(d, 28)).padStart(2, '0')}`,
+                description: `Valor: ${formatBRL(ev.value)}\nCriado pelo Finance Control.`,
+              })
               return (
                 <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: '9px', padding: '8px 10px', borderRadius: '9px', background: 'var(--bg4)', border: '1px solid var(--border)' }}>
                   <div style={{ width: '7px', height: '7px', borderRadius: '2px', flexShrink: 0, background: ev.transaction_id ? 'var(--purple)' : ev.type === 'income' ? 'var(--green)' : 'var(--red)' }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.description}</div>
-                    <div style={{ fontSize: '10px', color: 'var(--text3)' }}>Dia {d} Â· {ev.repeat === 'monthly' ? 'Mensal' : ev.repeat === 'yearly' ? 'Anual' : 'Ãšnico'}</div>
+                    <div style={{ fontSize: '10px', color: 'var(--text3)' }}>Dia {d} - {ev.repeat === 'monthly' ? 'Mensal' : ev.repeat === 'yearly' ? 'Anual' : 'Unico'}</div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
                     <div className="hide-val" style={{ fontSize: '12px', fontWeight: 600, color: ev.type === 'income' ? 'var(--green)' : 'var(--red)', whiteSpace: 'nowrap' }}>
                       <span>{ev.type === 'income' ? '+' : '-'}{formatBRL(ev.value)}</span>
                     </div>
                     <div style={{ display: 'flex', gap: '4px' }}>
-                      <a href={gcUrl} target="_blank" rel="noopener noreferrer" title="Google Agenda" style={{ cursor: 'pointer', fontSize: '10px', color: 'var(--cyan)', padding: '1px 5px', border: '1px solid var(--cyan)', borderRadius: '4px', opacity: .7, textDecoration: 'none' }}>ðŸ“…</a>
-                      {!ev.transaction_id && <button onClick={() => delEvent(ev.id)} style={{ fontSize: '10px', color: 'var(--text3)', padding: '1px 5px', border: '1px solid var(--border)', borderRadius: '4px', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>âœ•</button>}
+                      <a href={gcUrl} target="_blank" rel="noopener noreferrer" title="Google Agenda" style={{ cursor: 'pointer', fontSize: '10px', color: 'var(--cyan)', padding: '1px 5px', border: '1px solid var(--cyan)', borderRadius: '4px', opacity: .7, textDecoration: 'none' }}>GC</a>
+                      {!ev.transaction_id && <button onClick={() => delEvent(ev.id)} style={{ fontSize: '10px', color: 'var(--text3)', padding: '1px 5px', border: '1px solid var(--border)', borderRadius: '4px', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>X</button>}
                     </div>
                   </div>
                 </div>
@@ -189,19 +219,19 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowEventModal(false) }}>
           <div className="modal-box" style={{ width: '430px' }}>
             <div style={{ padding: '17px 22px 13px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span className="font-bebas" style={{ fontSize: '19px', letterSpacing: '2px' }}>Novo Evento â€” Dia {newDay}</span>
-              <button onClick={() => setShowEventModal(false)} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '11px' }}>âœ•</button>
+              <span className="font-bebas" style={{ fontSize: '19px', letterSpacing: '2px' }}>Novo Evento - Dia {newDay}</span>
+              <button onClick={() => setShowEventModal(false)} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '11px' }}>X</button>
             </div>
             <div style={{ padding: '18px 22px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', background: 'var(--bg4)', padding: '3px', borderRadius: '8px', marginBottom: '14px', border: '1px solid var(--border)' }}>
-                {(['income','expense'] as const).map(tp => (
+                {(['income', 'expense'] as const).map(tp => (
                   <div key={tp} onClick={() => setEvType(tp)} style={{ padding: '7px', textAlign: 'center', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, background: evType === tp ? (tp === 'income' ? 'rgba(0,150,74,.12)' : 'rgba(217,0,32,.1)') : 'transparent', color: evType === tp ? (tp === 'income' ? 'var(--green)' : 'var(--red)') : 'var(--text3)' }}>
-                    {tp === 'income' ? 'â†‘ Recebimento' : 'â†“ Pagamento'}
+                    {tp === 'income' ? 'Recebimento' : 'Pagamento'}
                   </div>
                 ))}
               </div>
               <div style={{ marginBottom: '13px' }}>
-                <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>DescriÃ§Ã£o</label>
+                <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Descricao</label>
                 <input className="fi" value={evDesc} onChange={e => setEvDesc(e.target.value)} placeholder="Ex: Aluguel, Parcela carro..." />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '13px' }}>
@@ -210,7 +240,7 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
                   <input className="fi" type="number" min="0" step="0.01" value={evVal} onChange={e => setEvVal(e.target.value)} placeholder="0,00" />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>RecorrÃªncia</label>
+                  <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Recorrencia</label>
                   <select className="fi" value={evRepeat} onChange={e => setEvRepeat(e.target.value as any)}>
                     <option value="once">Uma vez</option>
                     <option value="monthly">Mensal</option>

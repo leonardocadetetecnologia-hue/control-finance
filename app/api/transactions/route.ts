@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const durMonths = body.dur_months ? Number(body.dur_months) : null
 
     if (!description || !value || !date) {
-      return NextResponse.json({ error: 'Preencha descriÃ§Ã£o, valor e data.' }, { status: 400 })
+      return NextResponse.json({ error: 'Preencha descricao, valor e data.' }, { status: 400 })
     }
 
     const transactionId = crypto.randomUUID()
@@ -76,10 +76,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ transactions })
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'NÃ£o autenticado.' }, { status: 401 })
+      return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })
     }
 
     console.error(error)
-    return NextResponse.json({ error: 'NÃ£o foi possÃ­vel salvar a transaÃ§Ã£o.' }, { status: 500 })
+    return NextResponse.json({ error: 'Nao foi possivel salvar a transacao.' }, { status: 500 })
   }
 }

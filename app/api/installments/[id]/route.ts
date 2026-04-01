@@ -20,7 +20,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     `
 
     if (!rows.length) {
-      return NextResponse.json({ error: 'Parcela nÃ£o encontrada.' }, { status: 404 })
+      return NextResponse.json({ error: 'Parcela nao encontrada.' }, { status: 404 })
     }
 
     if (date && body.transaction_id && body.installment_n) {
@@ -37,10 +37,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     })
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'NÃ£o autenticado.' }, { status: 401 })
+      return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })
     }
 
     console.error(error)
-    return NextResponse.json({ error: 'NÃ£o foi possÃ­vel atualizar a parcela.' }, { status: 500 })
+    return NextResponse.json({ error: 'Nao foi possivel atualizar a parcela.' }, { status: 500 })
   }
 }

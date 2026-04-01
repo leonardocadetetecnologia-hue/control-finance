@@ -8,7 +8,7 @@ import type { Transaction, Installment, Category } from '@/lib/types'
 function toast(msg: string) {
   const t = document.createElement('div')
   t.className = 'toast'
-  t.textContent = 'âœ“ ' + msg
+  t.textContent = 'OK ' + msg
   document.body.appendChild(t)
   setTimeout(() => t.remove(), 3200)
 }
@@ -25,8 +25,8 @@ export default function TransactionsClient({
   const [ftype, setFtype] = useState('all')
   const [frecur, setFrecur] = useState('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [txType, setTxType] = useState<'income'|'expense'>('expense')
-  const [recMode, setRecMode] = useState<'once'|'installment'|'monthly'>('once')
+  const [txType, setTxType] = useState<'income' | 'expense'>('expense')
+  const [recMode, setRecMode] = useState<'once' | 'installment' | 'monthly'>('once')
   const [desc, setDesc] = useState('')
   const [value, setValue] = useState('')
   const [date, setDate] = useState(todayISO())
@@ -46,11 +46,16 @@ export default function TransactionsClient({
     (frecur === 'all' || t.rec_mode === frecur)
   )
 
-  function getCat(name: string) { return categories.find(c => c.name === name) || { emoji: 'ðŸ“¦', color: '#555' } }
+  function getCat(name: string) {
+    return categories.find(c => c.name === name) || { emoji: '📦', color: '#555' }
+  }
 
   async function save() {
     const val = parseFloat(value)
-    if (!desc || isNaN(val) || val <= 0 || !date) { alert('Preencha todos os campos.'); return }
+    if (!desc || isNaN(val) || val <= 0 || !date) {
+      alert('Preencha todos os campos.')
+      return
+    }
     setSaving(true)
     try {
       const category = cat || curCats[0]?.name || 'Outros'
@@ -70,11 +75,11 @@ export default function TransactionsClient({
       })
 
       if (recMode === 'installment') {
-        toast(`${parseInt(parcelas)} parcelas criadas no calendÃ¡rio`)
+        toast(`${parseInt(parcelas)} parcelas criadas no calendario`)
       } else if (recMode === 'monthly') {
-        toast('LanÃ§amento mensal criado')
+        toast('Lancamento mensal criado')
       } else {
-        toast('TransaÃ§Ã£o salva')
+        toast('Transacao salva')
       }
 
       setTxs(data.transactions || [])
@@ -88,7 +93,15 @@ export default function TransactionsClient({
   }
 
   function resetForm() {
-    setDesc(''); setValue(''); setDate(todayISO()); setCat(''); setParcelas(''); setDiaVenc(''); setDurMonths(''); setRecMode('once'); setTxType('expense')
+    setDesc('')
+    setValue('')
+    setDate(todayISO())
+    setCat('')
+    setParcelas('')
+    setDiaVenc('')
+    setDurMonths('')
+    setRecMode('once')
+    setTxType('expense')
   }
 
   async function markPaid(txId: string, instN: number) {
@@ -131,10 +144,10 @@ export default function TransactionsClient({
   }
 
   async function delTx(id: string) {
-    if (!confirm('Excluir esta transaÃ§Ã£o e todas as parcelas?')) return
+    if (!confirm('Excluir esta transacao e todas as parcelas?')) return
     await apiRequest<{ ok: true }>(`/api/transactions/${id}`, { method: 'DELETE' })
     setTxs(prev => prev.filter(t => t.id !== id))
-    toast('TransaÃ§Ã£o excluÃ­da')
+    toast('Transacao excluida')
   }
 
   const today2 = todayISO()
@@ -142,7 +155,7 @@ export default function TransactionsClient({
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-        <h1 className="font-bebas" style={{ fontSize: '22px', letterSpacing: '2px', color: 'var(--text)' }}>TransaÃ§Ãµes & Parcelamentos</h1>
+        <h1 className="font-bebas" style={{ fontSize: '22px', letterSpacing: '2px', color: 'var(--text)' }}>Transacoes & Parcelamentos</h1>
         <button className="btn-primary" onClick={() => { resetForm(); setShowModal(true) }}>+ Nova</button>
       </div>
 
@@ -161,7 +174,7 @@ export default function TransactionsClient({
 
       <div className="card">
         {filtered.length === 0 ? (
-          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text3)', fontSize: '12px' }}>Nenhuma transaÃ§Ã£o encontrada.</div>
+          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text3)', fontSize: '12px' }}>Nenhuma transacao encontrada.</div>
         ) : (
           filtered.map(t => {
             const c = getCat(t.category)
@@ -176,11 +189,11 @@ export default function TransactionsClient({
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text)', marginBottom: '3px' }}>{t.description}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-                      {t.rec_mode === 'installment' && <span style={{ fontSize: '9px', fontWeight: 700, background: 'rgba(179,136,255,.12)', color: 'var(--purple)', padding: '2px 5px', borderRadius: '4px' }}>ðŸ“‹ {t.total_parcelas}x {formatBRL((t.value||0) / (t.total_parcelas||1))}</span>}
-                      {t.rec_mode === 'monthly' && <span style={{ fontSize: '9px', fontWeight: 700, background: 'rgba(0,229,255,.1)', color: 'var(--cyan)', padding: '2px 5px', borderRadius: '4px' }}>ðŸ” Mensal{t.dur_months ? ` Â· ${t.dur_months}x` : ''}</span>}
+                      {t.rec_mode === 'installment' && <span style={{ fontSize: '9px', fontWeight: 700, background: 'rgba(179,136,255,.12)', color: 'var(--purple)', padding: '2px 5px', borderRadius: '4px' }}>[PARC] {t.total_parcelas}x {formatBRL((t.value || 0) / (t.total_parcelas || 1))}</span>}
+                      {t.rec_mode === 'monthly' && <span style={{ fontSize: '9px', fontWeight: 700, background: 'rgba(0,229,255,.1)', color: 'var(--cyan)', padding: '2px 5px', borderRadius: '4px' }}>[MENSAL]{t.dur_months ? ` - ${t.dur_months}x` : ''}</span>}
                       {t.rec_mode === 'once' && <span style={{ fontSize: '9px', fontWeight: 700, background: 'var(--bg4)', color: 'var(--text3)', padding: '2px 5px', borderRadius: '4px' }}>Avulso</span>}
                       {t.installments && <span style={{ fontSize: '10px', color: 'var(--text3)' }}>{paidCount}/{t.total_parcelas} pagas</span>}
-                      {overdueCount > 0 && <span style={{ fontSize: '10px', color: 'var(--red)', fontWeight: 600 }}>âš  {overdueCount} vencida(s)</span>}
+                      {overdueCount > 0 && <span style={{ fontSize: '10px', color: 'var(--red)', fontWeight: 600 }}>[ATENCAO] {overdueCount} vencida(s)</span>}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -205,11 +218,11 @@ export default function TransactionsClient({
                   <div style={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '12px 16px', marginBottom: '2px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
                       <span style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '.5px', textTransform: 'uppercase', color: 'var(--text3)' }}>
-                        {t.total_parcelas} parcelas â€” {formatBRL(t.value / (t.total_parcelas || 1))} cada
+                        {t.total_parcelas} parcelas - {formatBRL(t.value / (t.total_parcelas || 1))} cada
                       </span>
                       {overdueCount > 0 && (
                         <button onClick={() => rolloverAll(t.id)} style={{ fontSize: '10px', padding: '2px 10px', border: '1px solid var(--orange)', borderRadius: '5px', background: 'none', color: 'var(--orange)', cursor: 'pointer', fontFamily: 'inherit' }}>
-                          â†· Adiar todas vencidas ({overdueCount})
+                          Adiar todas vencidas ({overdueCount})
                         </button>
                       )}
                     </div>
@@ -222,17 +235,17 @@ export default function TransactionsClient({
                           <div className={`inst-num ${status}`}>{p.n}</div>
                           <div style={{ flex: 1, fontSize: '11px', color: 'var(--text2)' }}>
                             {new Date(p.date + 'T12:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            {(p.rolled_over || 0) > 0 && <span style={{ fontSize: '9px', background: 'rgba(255,145,0,.12)', color: 'var(--orange)', padding: '1px 5px', borderRadius: '3px', marginLeft: '4px' }}>â†· adiado {p.rolled_over}x</span>}
+                            {(p.rolled_over || 0) > 0 && <span style={{ fontSize: '9px', background: 'rgba(255,145,0,.12)', color: 'var(--orange)', padding: '1px 5px', borderRadius: '3px', marginLeft: '4px' }}>adiado {p.rolled_over}x</span>}
                           </div>
                           <div className="hide-val" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)' }}><span>{formatBRL(p.value)}</span></div>
                           <span className={`inst-status ${status}`}>{statusTxt}</span>
                           {!p.paid ? (
-                            <button onClick={() => markPaid(t.id, p.n)} style={{ fontSize: '10px', padding: '2px 7px', border: '1px solid var(--border2)', borderRadius: '4px', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '6px' }}>âœ“ Pagar</button>
+                            <button onClick={() => markPaid(t.id, p.n)} style={{ fontSize: '10px', padding: '2px 7px', border: '1px solid var(--border2)', borderRadius: '4px', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '6px' }}>Pagar</button>
                           ) : (
-                            <button onClick={() => markPaid(t.id, p.n)} style={{ fontSize: '10px', padding: '2px 7px', border: '1px solid var(--border)', borderRadius: '4px', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '6px' }}>â†© Desfazer</button>
+                            <button onClick={() => markPaid(t.id, p.n)} style={{ fontSize: '10px', padding: '2px 7px', border: '1px solid var(--border)', borderRadius: '4px', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '6px' }}>Desfazer</button>
                           )}
                           {!p.paid && (
-                            <button onClick={() => rollover(t.id, p.n)} style={{ fontSize: '10px', padding: '2px 7px', border: '1px solid var(--border2)', borderRadius: '4px', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '4px' }}>â†· Adiar</button>
+                            <button onClick={() => rollover(t.id, p.n)} style={{ fontSize: '10px', padding: '2px 7px', border: '1px solid var(--border2)', borderRadius: '4px', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '4px' }}>Adiar</button>
                           )}
                         </div>
                       )
@@ -249,21 +262,21 @@ export default function TransactionsClient({
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) { setShowModal(false); resetForm() } }}>
           <div className="modal-box" style={{ width: '480px' }}>
             <div style={{ padding: '17px 22px 13px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: 'var(--bg2)', zIndex: 1 }}>
-              <span className="font-bebas" style={{ fontSize: '19px', letterSpacing: '2px' }}>Nova TransaÃ§Ã£o</span>
-              <button onClick={() => { setShowModal(false); resetForm() }} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '11px' }}>âœ•</button>
+              <span className="font-bebas" style={{ fontSize: '19px', letterSpacing: '2px' }}>Nova Transacao</span>
+              <button onClick={() => { setShowModal(false); resetForm() }} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '11px' }}>X</button>
             </div>
             <div style={{ padding: '18px 22px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', background: 'var(--bg4)', padding: '3px', borderRadius: '8px', marginBottom: '14px', border: '1px solid var(--border)' }}>
                 {(['income', 'expense'] as const).map(tp => (
                   <div key={tp} onClick={() => setTxType(tp)} style={{ padding: '7px', textAlign: 'center', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, background: txType === tp ? (tp === 'income' ? 'rgba(0,150,74,.12)' : 'rgba(217,0,32,.1)') : 'transparent', color: txType === tp ? (tp === 'income' ? 'var(--green)' : 'var(--red)') : 'var(--text3)' }}>
-                    {tp === 'income' ? 'â†‘ Receita' : 'â†“ Despesa'}
+                    {tp === 'income' ? 'Receita' : 'Despesa'}
                   </div>
                 ))}
               </div>
 
               <div style={{ marginBottom: '13px' }}>
-                <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>DescriÃ§Ã£o</label>
-                <input className="fi" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ex: CartÃ£o Nubank, SalÃ¡rio..." />
+                <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Descricao</label>
+                <input className="fi" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ex: Cartao Nubank, Salario..." />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '13px' }}>
@@ -278,9 +291,9 @@ export default function TransactionsClient({
               </div>
 
               <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '6px' }}>Tipo de lanÃ§amento</label>
+                <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '6px' }}>Tipo de lancamento</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '3px', background: 'var(--bg4)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                  {[{ key: 'once', l: 'Avulso', s: 'sem repetiÃ§Ã£o' }, { key: 'installment', l: 'Parcelado', s: 'N parcelas' }, { key: 'monthly', l: 'Mensal fixo', s: 'todo mÃªs' }].map(r => (
+                  {[{ key: 'once', l: 'Avulso', s: 'sem repeticao' }, { key: 'installment', l: 'Parcelado', s: 'N parcelas' }, { key: 'monthly', l: 'Mensal fixo', s: 'todo mes' }].map(r => (
                     <div key={r.key} onClick={() => setRecMode(r.key as any)} style={{ padding: '7px 4px', textAlign: 'center', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 600, lineHeight: 1.2, background: recMode === r.key ? 'var(--bg2)' : 'transparent', color: recMode === r.key ? 'var(--text)' : 'var(--text3)' }}>
                       {r.l}<br /><span style={{ fontSize: '9px', opacity: .6 }}>{r.s}</span>
                     </div>
@@ -300,7 +313,7 @@ export default function TransactionsClient({
               {recMode === 'installment' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '13px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>NÂº parcelas</label>
+                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>No parcelas</label>
                     <input className="fi" type="number" min="2" max="360" value={parcelas} onChange={e => setParcelas(e.target.value)} placeholder="Ex: 12" />
                   </div>
                   <div>
@@ -320,7 +333,7 @@ export default function TransactionsClient({
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '13px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Dia do mÃªs</label>
+                      <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Dia do mes</label>
                       <input className="fi" type="number" min="1" max="31" value={diaVenc} onChange={e => setDiaVenc(e.target.value)} placeholder="Ex: 5" />
                     </div>
                     <div>
@@ -331,7 +344,7 @@ export default function TransactionsClient({
                     </div>
                   </div>
                   <div style={{ marginBottom: '13px' }}>
-                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Meses de duraÃ§Ã£o (opcional)</label>
+                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Meses de duracao (opcional)</label>
                     <input className="fi" type="number" min="1" value={durMonths} onChange={e => setDurMonths(e.target.value)} placeholder="Deixe vazio = 12 meses" />
                   </div>
                 </>

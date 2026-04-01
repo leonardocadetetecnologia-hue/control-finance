@@ -4,11 +4,14 @@ import { useState } from 'react'
 import { apiRequest } from '@/lib/api'
 import type { Category } from '@/lib/types'
 
-const PALETTE = ['#00e676','#00e5ff','#e8ff00','#b388ff','#ff9100','#ff3d57','#f06292','#4db6ac','#64b5f6','#ffd54f','#a5d6a7','#ef9a9a','#80cbc4','#ce93d8','#ffcc02','#90caf9']
+const PALETTE = ['#00e676', '#00e5ff', '#e8ff00', '#b388ff', '#ff9100', '#ff3d57', '#f06292', '#4db6ac', '#64b5f6', '#ffd54f', '#a5d6a7', '#ef9a9a', '#80cbc4', '#ce93d8', '#ffcc02', '#90caf9']
 
 function toast(msg: string) {
-  const t = document.createElement('div'); t.className = 'toast'; t.textContent = 'âœ“ ' + msg
-  document.body.appendChild(t); setTimeout(() => t.remove(), 3200)
+  const t = document.createElement('div')
+  t.className = 'toast'
+  t.textContent = '✓ ' + msg
+  document.body.appendChild(t)
+  setTimeout(() => t.remove(), 3200)
 }
 
 export default function CategoriesClient({ initialCategories, transactions }: {
@@ -16,22 +19,40 @@ export default function CategoriesClient({ initialCategories, transactions }: {
   transactions: { id: string; category: string }[]
 }) {
   const [cats, setCats] = useState(initialCategories)
-  const [tab, setTab] = useState<'all'|'expense'|'income'>('all')
+  const [tab, setTab] = useState<'all' | 'expense' | 'income'>('all')
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [name, setName] = useState('')
-  const [emoji, setEmoji] = useState('ðŸ“¦')
+  const [emoji, setEmoji] = useState('📦')
   const [color, setColor] = useState('#00e5ff')
-  const [type, setType] = useState<'income'|'expense'|'both'>('expense')
+  const [type, setType] = useState<'income' | 'expense' | 'both'>('expense')
   const [saving, setSaving] = useState(false)
 
   const filtered = tab === 'all' ? cats : cats.filter(c => c.type === tab || c.type === 'both')
 
-  function openNew() { setEditId(null); setName(''); setEmoji('ðŸ“¦'); setColor('#00e5ff'); setType('expense'); setShowModal(true) }
-  function openEdit(c: Category) { setEditId(c.id); setName(c.name); setEmoji(c.emoji); setColor(c.color); setType(c.type); setShowModal(true) }
+  function openNew() {
+    setEditId(null)
+    setName('')
+    setEmoji('📦')
+    setColor('#00e5ff')
+    setType('expense')
+    setShowModal(true)
+  }
+
+  function openEdit(c: Category) {
+    setEditId(c.id)
+    setName(c.name)
+    setEmoji(c.emoji)
+    setColor(c.color)
+    setType(c.type)
+    setShowModal(true)
+  }
 
   async function save() {
-    if (!name.trim()) { alert('Informe o nome.'); return }
+    if (!name.trim()) {
+      alert('Informe o nome.')
+      return
+    }
     setSaving(true)
     try {
       if (editId) {
@@ -50,12 +71,16 @@ export default function CategoriesClient({ initialCategories, transactions }: {
         toast('Categoria criada')
       }
       setShowModal(false)
-    } catch (e: any) { alert(e.message) } finally { setSaving(false) }
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function del(id: string, catName: string) {
     const count = transactions.filter(t => t.category === catName).length
-    if (!confirm(`Excluir "${catName}"?${count > 0 ? `\n${count} transaÃ§Ã£o(Ãµes) usam esta categoria.` : ''}`)) return
+    if (!confirm(`Excluir "${catName}"?${count > 0 ? `\n${count} transação(ões) usam esta categoria.` : ''}`)) return
     await apiRequest<{ ok: true }>(`/api/categories/${id}`, { method: 'DELETE' })
     setCats(prev => prev.filter(c => c.id !== id))
     toast('Categoria removida')
@@ -69,7 +94,7 @@ export default function CategoriesClient({ initialCategories, transactions }: {
       </div>
 
       <div style={{ display: 'flex', gap: '4px', marginBottom: '18px', background: 'var(--bg4)', padding: '4px', borderRadius: '10px', width: 'fit-content', border: '1px solid var(--border)' }}>
-        {(['all','expense','income'] as const).map(t => (
+        {(['all', 'expense', 'income'] as const).map(t => (
           <div key={t} onClick={() => setTab(t)} style={{ padding: '6px 14px', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: tab === t ? 'var(--text)' : 'var(--text3)', background: tab === t ? 'var(--bg2)' : 'transparent', boxShadow: tab === t ? '0 1px 3px var(--shadow)' : 'none', transition: 'all .12s' }}>
             {t === 'all' ? 'Todas' : t === 'expense' ? 'Despesas' : 'Receitas'}
           </div>
@@ -86,11 +111,11 @@ export default function CategoriesClient({ initialCategories, transactions }: {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{c.name}</div>
                 <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '.5px', textTransform: 'uppercase', color: 'var(--text3)', marginTop: '2px' }}>{typeLbl}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '1px' }}>{count} transaÃ§Ã£o(Ãµes)</div>
+                <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '1px' }}>{count} transação(ões)</div>
               </div>
               <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                <button onClick={() => openEdit(c)} style={{ width: '26px', height: '26px', background: 'none', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text3)', fontSize: '11px', display:'flex',alignItems:'center',justifyContent:'center' }} onMouseEnter={e=>(e.currentTarget.style.color='var(--cyan)')} onMouseLeave={e=>(e.currentTarget.style.color='var(--text3)')}>âœŽ</button>
-                <button onClick={() => del(c.id, c.name)} style={{ width: '26px', height: '26px', background: 'none', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text3)', fontSize: '11px', display:'flex',alignItems:'center',justifyContent:'center' }} onMouseEnter={e=>(e.currentTarget.style.color='var(--red)')} onMouseLeave={e=>(e.currentTarget.style.color='var(--text3)')}>âœ•</button>
+                <button onClick={() => openEdit(c)} style={{ width: '26px', height: '26px', background: 'none', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text3)', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--cyan)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text3)')}>✎</button>
+                <button onClick={() => del(c.id, c.name)} style={{ width: '26px', height: '26px', background: 'none', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text3)', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')} onMouseLeave={e => (e.currentTarget.style.color = 'var(--text3)')}>×</button>
               </div>
             </div>
           )
@@ -106,7 +131,7 @@ export default function CategoriesClient({ initialCategories, transactions }: {
           <div className="modal-box" style={{ width: '420px' }}>
             <div style={{ padding: '17px 22px 13px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span className="font-bebas" style={{ fontSize: '19px', letterSpacing: '2px' }}>{editId ? 'Editar Categoria' : 'Nova Categoria'}</span>
-              <button onClick={() => setShowModal(false)} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '11px' }}>âœ•</button>
+              <button onClick={() => setShowModal(false)} style={{ width: '26px', height: '26px', background: 'var(--bg4)', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text2)', fontSize: '11px' }}>×</button>
             </div>
             <div style={{ padding: '18px 22px' }}>
               <div style={{ marginBottom: '13px' }}>
@@ -116,7 +141,7 @@ export default function CategoriesClient({ initialCategories, transactions }: {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '13px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Emoji</label>
-                  <input className="fi" value={emoji} onChange={e => setEmoji(e.target.value)} maxLength={2} placeholder="ðŸ“¦" style={{ fontSize: '20px', textAlign: 'center' }} />
+                  <input className="fi" value={emoji} onChange={e => setEmoji(e.target.value)} maxLength={2} placeholder="📦" style={{ fontSize: '20px', textAlign: 'center' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '5px' }}>Tipo</label>
