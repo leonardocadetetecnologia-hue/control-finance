@@ -1,17 +1,12 @@
-import { auth } from '@/auth'
-import { redirect } from 'next/navigation'
 import DashboardShell from '@/components/layout/DashboardShell'
-import { getEvents, getTransactions } from '@/lib/data'
+import { getCachedEvents, getCachedTransactions, getRequiredUser } from '@/lib/server-data'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth()
-  const user = session?.user
-  if (!user) redirect('/login')
-
+  const user = await getRequiredUser()
   const userId = user.id
   const [transactions, events] = await Promise.all([
-    getTransactions(userId),
-    getEvents(userId),
+    getCachedTransactions(userId),
+    getCachedEvents(userId),
   ])
 
   return (

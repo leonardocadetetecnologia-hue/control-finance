@@ -1,16 +1,13 @@
-import { auth } from '@/auth'
 import CategoriesClient from '@/components/categories/CategoriesClient'
-import { getCategories, getTransactions } from '@/lib/data'
-import { redirect } from 'next/navigation'
+import { getCachedCategories, getCachedTransactions, getRequiredUser } from '@/lib/server-data'
 
 export default async function CategoriesPage() {
-  const session = await auth()
-  const userId = session?.user?.id
-  if (!userId) redirect('/login')
+  const user = await getRequiredUser()
+  const userId = user.id
 
   const [categories, transactions] = await Promise.all([
-    getCategories(userId),
-    getTransactions(userId),
+    getCachedCategories(userId),
+    getCachedTransactions(userId),
   ])
 
   return (

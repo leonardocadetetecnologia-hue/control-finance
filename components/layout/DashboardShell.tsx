@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import type { CalendarEvent, Metrics, Transaction } from '@/lib/types'
@@ -40,6 +41,12 @@ const NAV = [
   { href: '/history', label: 'Historico' },
 ]
 
+const PREFETCH_ROUTES = [
+  ...NAV.map(item => item.href),
+  '/transactions?new=1',
+  '/calendar?new=1',
+]
+
 export default function DashboardShell({
   children,
   user,
@@ -69,6 +76,10 @@ export default function DashboardShell({
     document.documentElement.setAttribute('data-theme', savedTheme)
     document.body.classList.toggle('vals-hidden', savedHidden)
   }, [])
+
+  useEffect(() => {
+    PREFETCH_ROUTES.forEach(route => router.prefetch(route))
+  }, [router])
 
   function changeTheme(nextTheme: string) {
     setTheme(nextTheme)
@@ -104,14 +115,6 @@ export default function DashboardShell({
     router.refresh()
   }
 
-  function openNewTransaction() {
-    router.push('/transactions?new=1')
-  }
-
-  function openNewEvent() {
-    router.push('/calendar?new=1')
-  }
-
   const metrics = useMemo<Metrics>(() => buildMetrics(transactions, year, month), [transactions, year, month])
   const reminders = useMemo(() => buildUpcomingReminders(transactions, events, 4), [transactions, events])
   const expenseMode = pathname === '/transactions' && searchParams.get('type') === 'expense'
@@ -134,8 +137,8 @@ export default function DashboardShell({
             </div>
 
             <div className="shell-actions">
-              <button className="btn-primary shell-action-btn" onClick={openNewTransaction}>+ Transacao</button>
-              <button className="btn-ghost shell-action-btn" onClick={openNewEvent}>+ Evento</button>
+              <Link className="btn-primary shell-action-btn" href="/transactions?new=1" prefetch>+ Transacao</Link>
+              <Link className="btn-ghost shell-action-btn" href="/calendar?new=1" prefetch>+ Evento</Link>
               <button className="shell-icon-btn" onClick={toggleHidden} title={hidden ? 'Mostrar valores' : 'Ocultar valores'}>
                 {hidden ? 'Mostrar' : 'Ocultar'}
               </button>
@@ -205,13 +208,14 @@ export default function DashboardShell({
                 : pathname === item.href
 
               return (
-                <button
+                <Link
                   key={item.href}
                   className={`shell-nav-item${isActive ? ' active' : ''}`}
-                  onClick={() => router.push(item.href)}
+                  href={item.href}
+                  prefetch
                 >
                   {item.label}
-                </button>
+                </Link>
               )
             })}
           </nav>

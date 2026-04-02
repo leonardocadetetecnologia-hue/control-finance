@@ -1,17 +1,14 @@
-import { auth } from '@/auth'
 import HistoryClient from '@/components/history/HistoryClient'
-import { getCategories, getInstallments, getTransactions } from '@/lib/data'
-import { redirect } from 'next/navigation'
+import { getCachedCategories, getCachedInstallments, getCachedTransactions, getRequiredUser } from '@/lib/server-data'
 
 export default async function HistoryPage() {
-  const session = await auth()
-  const userId = session?.user?.id
-  if (!userId) redirect('/login')
+  const user = await getRequiredUser()
+  const userId = user.id
 
   const [transactions, installments, categories] = await Promise.all([
-    getTransactions(userId),
-    getInstallments(userId),
-    getCategories(userId),
+    getCachedTransactions(userId),
+    getCachedInstallments(userId),
+    getCachedCategories(userId),
   ])
 
   return (

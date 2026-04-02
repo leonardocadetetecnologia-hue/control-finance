@@ -1,14 +1,11 @@
-import { auth } from '@/auth'
 import CalendarClient from '@/components/calendar/CalendarClient'
-import { getEvents } from '@/lib/data'
-import { redirect } from 'next/navigation'
+import { getCachedEvents, getRequiredUser } from '@/lib/server-data'
 
 export default async function CalendarPage() {
-  const session = await auth()
-  const userId = session?.user?.id
-  if (!userId) redirect('/login')
+  const user = await getRequiredUser()
+  const userId = user.id
 
-  const events = await getEvents(userId)
+  const events = await getCachedEvents(userId)
 
   return <CalendarClient initialEvents={events} />
 }

@@ -1,14 +1,11 @@
-import { auth } from '@/auth'
 import IncomeClient from '@/components/income/IncomeClient'
-import { getIncomeSources } from '@/lib/data'
-import { redirect } from 'next/navigation'
+import { getCachedIncomeSources, getRequiredUser } from '@/lib/server-data'
 
 export default async function IncomePage() {
-  const session = await auth()
-  const userId = session?.user?.id
-  if (!userId) redirect('/login')
+  const user = await getRequiredUser()
+  const userId = user.id
 
-  const sources = await getIncomeSources(userId)
+  const sources = await getCachedIncomeSources(userId)
 
   return <IncomeClient initialSources={sources} />
 }

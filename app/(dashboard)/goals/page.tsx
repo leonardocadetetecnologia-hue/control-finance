@@ -1,14 +1,11 @@
-import { auth } from '@/auth'
 import GoalsClient from '@/components/goals/GoalsClient'
-import { getGoals } from '@/lib/data'
-import { redirect } from 'next/navigation'
+import { getCachedGoals, getRequiredUser } from '@/lib/server-data'
 
 export default async function GoalsPage() {
-  const session = await auth()
-  const userId = session?.user?.id
-  if (!userId) redirect('/login')
+  const user = await getRequiredUser()
+  const userId = user.id
 
-  const goals = await getGoals(userId)
+  const goals = await getCachedGoals(userId)
 
   return <GoalsClient initialGoals={goals} />
 }
