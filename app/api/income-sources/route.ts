@@ -10,48 +10,36 @@ export async function POST(request: Request) {
     const value = parseMoneyInput(body.value)
 
     const sourceId = crypto.randomUUID()
-    const eventId = crypto.randomUUID()
+    const name = String(body.name || '').trim()
+    const day = Number(body.day || 1)
+    const sourceType = String(body.source_type || 'Outros')
+    const startDate = String(body.start_date || new Date().toISOString().split('T')[0])
 
-    if (!String(body.name || '').trim() || !Number.isFinite(value) || value <= 0) {
-      return NextResponse.json({ error: 'Preencha nome e valor valido.' }, { status: 400 })
+    if (!name || !Number.isFinite(value) || value <= 0 || !Number.isInteger(day) || day < 1 || day > 31) {
+      return NextResponse.json({ error: 'Preencha nome, valor valido e dia de recebimento.' }, { status: 400 })
     }
 
-    await sql.transaction([
-      sql`
-        insert into income_sources (id, user_id, name, value, day, source_type, start_date)
-        values (
-          ${sourceId},
-          ${userId},
-          ${String(body.name || '').trim()},
-          ${value},
-          ${Number(body.day || 1)},
-          ${String(body.source_type || 'Outros')},
-          ${String(body.start_date || new Date().toISOString().split('T')[0])}
-        )
-      `,
-      sql`
-        insert into events (id, user_id, description, value, type, repeat, day, category)
-        values (
-          ${eventId},
-          ${userId},
-          ${String(body.name || '').trim()},
-          ${value},
-          'income',
-          'monthly',
-          ${Number(body.day || 1)},
-          'Renda'
-        )
-      `,
-    ])
+    await sql`
+      insert into income_sources (id, user_id, name, value, day, source_type, start_date)
+      values (
+        ${sourceId},
+        ${userId},
+        ${name},
+        ${value},
+        ${day},
+        ${sourceType},
+        ${startDate}
+      )
+    `
 
     return NextResponse.json({
       id: sourceId,
       user_id: userId,
-      name: String(body.name || '').trim(),
+      name,
       value,
-      day: Number(body.day || 1),
-      source_type: String(body.source_type || 'Outros'),
-      start_date: String(body.start_date || new Date().toISOString().split('T')[0]),
+      day,
+      source_type: sourceType,
+      start_date: startDate,
     })
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {

@@ -4,9 +4,11 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import type { CalendarEvent, Metrics, Transaction } from '@/lib/types'
+import { apiRequest } from '@/lib/api'
+import type { CalendarEvent, IncomeSource, Metrics, Transaction } from '@/lib/types'
 import { buildMetrics, buildUpcomingReminders } from '@/lib/utils/finance'
-import { formatBRL, formatDateShort, MONTHS } from '@/lib/utils/format'
+import { formatBRL, formatDateShort, MONTHS, todayISO } from '@/lib/utils/format'
+import { formatMoneyInput, parseMoneyInput, sanitizeMoneyDraft } from '@/lib/utils/money'
 
 interface AppCtx {
   month: number
@@ -17,9 +19,20 @@ interface AppCtx {
   toggleHidden: () => void
   theme: string
   setTheme: (theme: string) => void
+  incomeSources: IncomeSource[]
 }
 
-const AppContext = createContext<AppCtx>({} as AppCtx)
+const AppContext = createContext<AppCtx>({
+  month: 0,
+  year: 0,
+  setMonth: () => {},
+  setYear: () => {},
+  hidden: false,
+  toggleHidden: () => {},
+  theme: 'dark',
+  setTheme: () => {},
+  incomeSources: [],
+})
 export const useApp = () => useContext(AppContext)
 
 const THEMES = [
@@ -52,11 +65,13 @@ export default function DashboardShell({
   user,
   transactions,
   events,
+  incomeSources,
 }: {
   children: React.ReactNode
-  user: { email?: string | null }
+  user: { email?: string | null; name?: string | null }
   transactions: Transaction[]
   events: CalendarEvent[]
+  incomeSources: IncomeSource[]
 }) {
   const now = new Date()
   const router = useRouter()
@@ -67,6 +82,10 @@ export default function DashboardShell({
   const [year, setYear] = useState(now.getFullYear())
   const [hidden, setHidden] = useState(false)
   const [theme, setTheme] = useState('dark')
+  const [showIncomeOnboarding, setShowIncomeOnboarding] = useState(false)
+  const [incomeValue, setIncomeValue] = useState('')
+  const [incomeDay, setIncomeDay] = useState('')
+  const [savingIncome, setSavingIncome] = useState(false)
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('fx_theme') || 'dark'
@@ -80,6 +99,13 @@ export default function DashboardShell({
   useEffect(() => {
     PREFETCH_ROUTES.forEach(route => router.prefetch(route))
   }, [router])
+
+  useEffect(() => {
+    const dismissedKey = `fc_income_onboarding_dismissed_${user.email || 'anon'}`
+    const dismissed = localStorage.getItem(dismissedKey) === 'true'
+    const hasRecurringIncome = transactions.some(transaction => transaction.type === 'income' && transaction.rec_mode === 'monthly')
+    setShowIncomeOnboarding(!dismissed && incomeSources.length === 0 && !hasRecurringIncome)
+  }, [incomeSources.length, transactions, user.email])
 
   function changeTheme(nextTheme: string) {
     setTheme(nextTheme)
@@ -115,12 +141,50 @@ export default function DashboardShell({
     router.refresh()
   }
 
-  const metrics = useMemo<Metrics>(() => buildMetrics(transactions, year, month), [transactions, year, month])
+  function dismissIncomeOnboarding() {
+    localStorage.setItem(`fc_income_onboarding_dismissed_${user.email || 'anon'}`, 'true')
+    setShowIncomeOnboarding(false)
+  }
+
+  async function saveIncomeOnboarding() {
+    const value = parseMoneyInput(incomeValue)
+    const day = Number(incomeDay)
+
+    if (!Number.isFinite(value) || value <= 0 || !Number.isInteger(day) || day < 1 || day > 31) {
+      alert('Informe um valor valido em reais e um dia entre 1 e 31.')
+      return
+    }
+
+    setSavingIncome(true)
+    try {
+      await apiRequest<IncomeSource>('/api/income-sources', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: user.name ? `Salario de ${user.name}` : 'Salario fixo',
+          value,
+          day,
+          source_type: 'Salario CLT',
+          start_date: todayISO(),
+        }),
+      })
+      localStorage.setItem(`fc_income_onboarding_dismissed_${user.email || 'anon'}`, 'true')
+      setShowIncomeOnboarding(false)
+      setIncomeValue('')
+      setIncomeDay('')
+      router.refresh()
+    } catch (error: any) {
+      alert(error.message)
+    } finally {
+      setSavingIncome(false)
+    }
+  }
+
+  const metrics = useMemo<Metrics>(() => buildMetrics(transactions, year, month, incomeSources), [transactions, year, month, incomeSources])
   const reminders = useMemo(() => buildUpcomingReminders(transactions, events, 4), [transactions, events])
   const expenseMode = pathname === '/transactions' && searchParams.get('type') === 'expense'
 
   return (
-    <AppContext.Provider value={{ month, year, setMonth, setYear, hidden, toggleHidden, theme, setTheme: changeTheme }}>
+    <AppContext.Provider value={{ month, year, setMonth, setYear, hidden, toggleHidden, theme, setTheme: changeTheme, incomeSources }}>
       <div className="shell-page">
         <header className="shell-header">
           <div className="shell-topline">
@@ -224,6 +288,59 @@ export default function DashboardShell({
         <main className="shell-main">
           {children}
         </main>
+
+        {showIncomeOnboarding && (
+          <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) dismissIncomeOnboarding() }}>
+            <div className="modal-box">
+              <div style={{ padding: '20px 22px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="font-bebas" style={{ fontSize: '24px' }}>Antes de comecar</span>
+                <button className="btn-ghost" onClick={dismissIncomeOnboarding}>Agora nao</button>
+              </div>
+
+              <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ color: 'var(--text2)', lineHeight: 1.5 }}>
+                  Informe sua renda fixa mensal e o dia em que costuma receber. Vamos usar isso para montar seu calendario financeiro automaticamente.
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Valor da renda fixa</label>
+                  <input
+                    className="fi"
+                    inputMode="decimal"
+                    value={incomeValue}
+                    onChange={(event) => setIncomeValue(sanitizeMoneyDraft(event.target.value))}
+                    onBlur={() => setIncomeValue((current) => formatMoneyInput(current))}
+                    placeholder="0,00"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Dia do recebimento</label>
+                  <input
+                    className="fi"
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={incomeDay}
+                    onChange={(event) => setIncomeDay(event.target.value)}
+                    placeholder="Ex: 5"
+                  />
+                </div>
+
+                <div style={{ fontSize: '12px', color: 'var(--text3)' }}>
+                  Depois voce pode ajustar isso em Minha Renda.
+                </div>
+              </div>
+
+              <div style={{ padding: '18px 22px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button className="btn-ghost" onClick={dismissIncomeOnboarding}>Pular por agora</button>
+                <button className="btn-primary" onClick={saveIncomeOnboarding} disabled={savingIncome}>
+                  {savingIncome ? 'Salvando...' : 'Salvar renda fixa'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AppContext.Provider>
   )

@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useApp } from '@/components/layout/DashboardShell'
 import { apiRequest } from '@/lib/api'
 import { formatBRL, MONTHS } from '@/lib/utils/format'
 import { buildGCalUrl, downloadFinanceCalendarIcs } from '@/lib/utils/gcal'
 import { formatMoneyInput, parseMoneyInput, sanitizeMoneyDraft } from '@/lib/utils/money'
-import { expandTransactionsForMonth } from '@/lib/utils/finance'
+import { expandIncomeSourcesForMonth, expandTransactionsForMonth } from '@/lib/utils/finance'
 import type { CalendarEvent, Installment, Transaction } from '@/lib/types'
 
 type EventKind = 'payment' | 'receipt' | 'reminder_charge' | 'reminder_receive'
@@ -41,9 +42,27 @@ function getEventLabel(event: CalendarEvent) {
   return kind === 'receipt' ? 'Recebimento' : 'Pagamento'
 }
 
+function getDaysInMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate()
+}
+
 function getEventDateForMonth(event: CalendarEvent, year: number, month: number) {
+  if (event.repeat === 'monthly') {
+    const sourceDate = event.date ? new Date(`${event.date}T12:00:00`) : null
+    const day = String(Math.min(event.day || sourceDate?.getDate() || 1, getDaysInMonth(year, month))).padStart(2, '0')
+    return `${year}-${String(month + 1).padStart(2, '0')}-${day}`
+  }
+
+  if (event.repeat === 'yearly' && event.date) {
+    const sourceDate = new Date(`${event.date}T12:00:00`)
+    const targetMonth = sourceDate.getMonth()
+    const targetDay = String(Math.min(sourceDate.getDate(), getDaysInMonth(year, targetMonth))).padStart(2, '0')
+    return `${year}-${String(targetMonth + 1).padStart(2, '0')}-${targetDay}`
+  }
+
   if (event.date) return event.date
-  const day = String(Math.min(event.day || 1, 28)).padStart(2, '0')
+
+  const day = String(Math.min(event.day || 1, getDaysInMonth(year, month))).padStart(2, '0')
   return `${year}-${String(month + 1).padStart(2, '0')}-${day}`
 }
 
@@ -62,6 +81,7 @@ export default function CalendarClient({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const { incomeSources } = useApp()
 
   const [month, setMonth] = useState(now.getMonth())
   const [year, setYear] = useState(now.getFullYear())
@@ -107,10 +127,28 @@ export default function CalendarClient({
   const prevDim = new Date(year, month, 0).getDate()
 
   const visibleEvents = useMemo(() => {
+    const mirroredIncomeSourceEvent = (event: CalendarEvent) =>
+      !event.transaction_id
+      && event.type === 'income'
+      && event.repeat === 'monthly'
+      && incomeSources.some((source) =>
+        source.name === event.description
+        && source.day === (event.day || source.day)
+        && Math.abs(source.value - Number(event.value || 0)) < 0.001,
+      )
+
+    const standaloneEvents = events.filter((event) => !mirroredIncomeSourceEvent(event))
+
     const existingTransactionDates = new Set(
-      events
+      standaloneEvents
         .filter(event => event.transaction_id)
         .map(event => `${event.transaction_id}|${getEventDateForMonth(event, year, month)}`),
+    )
+
+    const existingIncomeDates = new Set(
+      standaloneEvents
+        .filter(event => !event.transaction_id && event.type === 'income')
+        .map(event => `${event.description}|${getEventDateForMonth(event, year, month)}|${Number(event.value || 0)}`),
     )
 
     const derivedEvents = expandTransactionsForMonth(initialTransactions, year, month)
@@ -128,37 +166,49 @@ export default function CalendarClient({
         category: row.category,
       }))
 
-    return [...events, ...derivedEvents]
-  }, [events, initialTransactions, month, year])
+    const derivedIncomeEvents = expandIncomeSourcesForMonth(incomeSources, year, month)
+      .filter(row => !existingIncomeDates.has(`${row.description}|${row.date}|${row.value}`))
+      .map<CalendarEvent>((row) => ({
+        id: `source-${row.sourceId}-${row.date}`,
+        user_id: '',
+        description: row.description,
+        value: row.value,
+        type: 'income',
+        repeat: 'monthly',
+        day: new Date(`${row.date}T12:00:00`).getDate(),
+        date: row.date,
+        category: row.category,
+      }))
+
+    return [...standaloneEvents, ...derivedEvents, ...derivedIncomeEvents]
+  }, [events, incomeSources, initialTransactions, month, year])
 
   const evMap: Record<number, CalendarEvent[]> = {}
   visibleEvents.forEach(event => {
-    if (event.date) {
-      const date = new Date(`${event.date}T12:00:00`)
-      if (date.getMonth() === month && date.getFullYear() === year) {
-        const day = date.getDate()
-        if (!evMap[day]) evMap[day] = []
-        evMap[day].push(event)
-      }
-    } else if (event.repeat === 'monthly' || event.repeat === 'yearly') {
-      const day = Math.min(event.day || 1, dim)
+    const resolvedDate = getEventDateForMonth(event, year, month)
+    if (!resolvedDate) return
+
+    const date = new Date(`${resolvedDate}T12:00:00`)
+    if (date.getMonth() === month && date.getFullYear() === year) {
+      const day = date.getDate()
       if (!evMap[day]) evMap[day] = []
-      evMap[day].push(event)
+      evMap[day].push({ ...event, date: resolvedDate })
     }
   })
 
-  const upcomingEvents = visibleEvents.filter(event => {
-    if (event.date) {
+  const upcomingEvents = visibleEvents
+    .map((event) => ({ ...event, date: getEventDateForMonth(event, year, month) }))
+    .filter(event => {
+      if (!event.date) return false
       const date = new Date(`${event.date}T12:00:00`)
       return date.getMonth() === month && date.getFullYear() === year
-    }
-    return event.repeat === 'monthly' || event.repeat === 'yearly'
-  }).sort((a, b) => {
-    const dayA = getEventDay(a)
-    const dayB = getEventDay(b)
+    })
+    .sort((a, b) => {
+      const dayA = getEventDay(a)
+      const dayB = getEventDay(b)
     if (dayA !== dayB) return dayA - dayB
     return a.description.localeCompare(b.description)
-  })
+    })
 
   const filteredUpcomingEvents = upcomingEvents.filter((event) => {
     const tone = getEventTone(event)
@@ -389,7 +439,7 @@ export default function CalendarClient({
               const tone = getEventTone(event)
               const calendarUrl = buildGCalUrl({
                 title: `${getEventLabel(event)}: ${event.description}`,
-                date: event.date || `${year}-${String(month + 1).padStart(2, '0')}-${String(Math.min(day, 28)).padStart(2, '0')}`,
+                date: event.date || `${year}-${String(month + 1).padStart(2, '0')}-${String(Math.min(day, getDaysInMonth(year, month))).padStart(2, '0')}`,
                 description: event.value ? `Valor: ${formatBRL(event.value)}` : 'Lembrete do Finance Control',
               })
 
@@ -407,8 +457,8 @@ export default function CalendarClient({
                       <span>{event.value ? formatBRL(event.value) : 'Lembrete'}</span>
                     </div>
                     <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '6px' }}>
-                      <a className="btn-ghost" href={calendarUrl} target="_blank" rel="noreferrer">GC</a>
-                      {!event.transaction_id && <button className="btn-ghost" onClick={() => delEvent(event.id)}>Excluir</button>}
+                      <a className="btn-ghost" href={calendarUrl} target="_blank" rel="noreferrer">Google Agenda</a>
+                      {!event.transaction_id && !event.id.startsWith('source-') && <button className="btn-ghost" onClick={() => delEvent(event.id)}>Excluir</button>}
                     </div>
                   </div>
                 </div>

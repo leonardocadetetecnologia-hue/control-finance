@@ -38,9 +38,11 @@ export default function IncomeClient({ initialSources }: { initialSources: Incom
 
   const total = sources.reduce((sum, source) => sum + source.value, 0)
   const now = new Date()
+  const buildPaymentDate = (year: number, month: number, day: number) =>
+    new Date(year, month, Math.min(day, new Date(year, month + 1, 0).getDate()), 12)
   const nextPayment = sources.map(source => {
-    let date = new Date(now.getFullYear(), now.getMonth(), source.day)
-    if (date <= now) date = new Date(now.getFullYear(), now.getMonth() + 1, source.day)
+    let date = buildPaymentDate(now.getFullYear(), now.getMonth(), source.day)
+    if (date <= now) date = buildPaymentDate(now.getFullYear(), now.getMonth() + 1, source.day)
     return { ...source, _next: date }
   }).sort((a, b) => a._next.getTime() - b._next.getTime())[0]
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { expandTransactionsForMonth } from '@/lib/utils/finance'
+import { buildMonthRows } from '@/lib/utils/finance'
 import { formatBRL, formatDate, MONTHS } from '@/lib/utils/format'
 import { useApp } from '@/components/layout/DashboardShell'
 import type { Category, Installment, Transaction } from '@/lib/types'
@@ -13,13 +13,13 @@ export default function DashboardClient({
   transactions: (Transaction & { installments?: Installment[] })[]
   categories: Category[]
 }) {
-  const { month, year } = useApp()
+  const { month, year, incomeSources } = useApp()
 
   function getCategory(name: string) {
     return categories.find(category => category.name === name) || { emoji: '📦', color: '#555' }
   }
 
-  const monthRows = useMemo(() => expandTransactionsForMonth(transactions, year, month), [transactions, year, month])
+  const monthRows = useMemo(() => buildMonthRows(transactions, incomeSources, year, month), [transactions, incomeSources, year, month])
   const income = monthRows.filter(row => row.type === 'income').reduce((sum, row) => sum + row.value, 0)
   const expenses = monthRows.filter(row => row.type === 'expense').reduce((sum, row) => sum + row.value, 0)
 

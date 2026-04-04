@@ -1,5 +1,5 @@
-import type { CalendarEvent, Installment, Metrics, Transaction, TransactionType } from '@/lib/types'
-import { addMonths, todayISO } from '@/lib/utils/format'
+import type { CalendarEvent, IncomeSource, Installment, Metrics, Transaction, TransactionType } from '@/lib/types'
+import { todayISO } from '@/lib/utils/format'
 
 export interface ExpandedFinanceRow {
   date: string
@@ -10,6 +10,7 @@ export interface ExpandedFinanceRow {
   status: string
   recMode: string
   transactionId?: string
+  sourceId?: string
 }
 
 export interface ReminderItem {
@@ -24,8 +25,12 @@ function monthId(year: number, month: number) {
   return year * 12 + month
 }
 
+function daysInMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate()
+}
+
 function isoDateForMonth(year: number, month: number, day: number) {
-  return new Date(year, month, Math.min(day, 28)).toISOString().split('T')[0]
+  return new Date(year, month, Math.min(day, daysInMonth(year, month)), 12).toISOString().split('T')[0]
 }
 
 function parseMonthId(date: string) {
@@ -39,6 +44,36 @@ function getDueDay(transaction: Transaction) {
 
 export function getMonthlyOccurrenceDate(transaction: Transaction, year: number, month: number) {
   return isoDateForMonth(year, month, getDueDay(transaction))
+}
+
+export function getIncomeSourceOccurrenceDate(source: IncomeSource, year: number, month: number) {
+  return isoDateForMonth(year, month, source.day)
+}
+
+export function incomeSourceOccursInMonth(source: IncomeSource, year: number, month: number) {
+  const startId = parseMonthId(source.start_date)
+  const targetId = monthId(year, month)
+  return targetId >= startId
+}
+
+export function expandIncomeSourcesForMonth(sources: IncomeSource[], year: number, month: number) {
+  const today = todayISO()
+  return sources
+    .filter(source => incomeSourceOccursInMonth(source, year, month))
+    .map<ExpandedFinanceRow>((source) => {
+      const occurrenceDate = getIncomeSourceOccurrenceDate(source, year, month)
+      return {
+        date: occurrenceDate,
+        description: source.name,
+        category: source.source_type || 'Renda',
+        type: 'income',
+        value: source.value,
+        status: occurrenceDate < today ? 'Recebida' : 'Agendada',
+        recMode: 'Renda fixa',
+        sourceId: source.id,
+      }
+    })
+    .sort((a, b) => a.date.localeCompare(b.date))
 }
 
 export function monthlyTransactionOccursInMonth(transaction: Transaction, year: number, month: number) {
@@ -179,8 +214,25 @@ export function expandTransactionsForRange(
   return rows.sort((a, b) => b.date.localeCompare(a.date))
 }
 
-export function buildMetrics(transactions: (Transaction & { installments?: Installment[] })[], year: number, month: number): Metrics {
-  const rows = expandTransactionsForMonth(transactions, year, month)
+export function buildMonthRows(
+  transactions: (Transaction & { installments?: Installment[] })[],
+  incomeSources: IncomeSource[],
+  year: number,
+  month: number,
+) {
+  return [
+    ...expandTransactionsForMonth(transactions, year, month),
+    ...expandIncomeSourcesForMonth(incomeSources, year, month),
+  ].sort((a, b) => a.date.localeCompare(b.date))
+}
+
+export function buildMetrics(
+  transactions: (Transaction & { installments?: Installment[] })[],
+  year: number,
+  month: number,
+  incomeSources: IncomeSource[] = [],
+): Metrics {
+  const rows = buildMonthRows(transactions, incomeSources, year, month)
   const today = todayISO()
   const income = rows.filter(row => row.type === 'income').reduce((sum, row) => sum + row.value, 0)
   const expenses = rows.filter(row => row.type === 'expense').reduce((sum, row) => sum + row.value, 0)
@@ -198,9 +250,12 @@ export function buildMetrics(transactions: (Transaction & { installments?: Insta
 
 function nextOccurrenceFromDay(day: number, today: string) {
   const todayDate = new Date(`${today}T12:00:00`)
-  const candidate = new Date(todayDate.getFullYear(), todayDate.getMonth(), Math.min(day, 28))
+  const buildDate = (year: number, month: number) =>
+    new Date(year, month, Math.min(day, daysInMonth(year, month)), 12)
+
+  const candidate = buildDate(todayDate.getFullYear(), todayDate.getMonth())
   if (candidate.toISOString().split('T')[0] < today) {
-    return addMonths(candidate.toISOString().split('T')[0], 1)
+    return buildDate(todayDate.getFullYear(), todayDate.getMonth() + 1).toISOString().split('T')[0]
   }
   return candidate.toISOString().split('T')[0]
 }

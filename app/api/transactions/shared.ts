@@ -14,7 +14,10 @@ type TransactionPayload = {
 
 function monthlyEventDate(startDate: string, offset: number, dueDay: number) {
   const baseDate = new Date(`${startDate}T12:00:00`)
-  const eventDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + offset, Math.min(dueDay, 28))
+  const year = baseDate.getFullYear()
+  const month = baseDate.getMonth() + offset
+  const lastDay = new Date(year, month + 1, 0).getDate()
+  const eventDate = new Date(year, month, Math.min(dueDay, lastDay), 12)
   return eventDate.toISOString().split('T')[0]
 }
 
