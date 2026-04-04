@@ -9,6 +9,7 @@ import { formatMoneyInput, parseMoneyInput, sanitizeMoneyDraft } from '@/lib/uti
 import type { CalendarEvent } from '@/lib/types'
 
 type EventKind = 'payment' | 'receipt' | 'reminder_charge' | 'reminder_receive'
+type ListFilter = 'all' | 'income' | 'expense' | 'reminder'
 
 function toast(msg: string) {
   const t = document.createElement('div')
@@ -45,6 +46,10 @@ function getEventDateForMonth(event: CalendarEvent, year: number, month: number)
   return `${year}-${String(month + 1).padStart(2, '0')}-${day}`
 }
 
+function getEventDay(event: CalendarEvent) {
+  return event.date ? new Date(`${event.date}T12:00:00`).getDate() : event.day || 1
+}
+
 export default function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent[] }) {
   const now = new Date()
   const router = useRouter()
@@ -63,6 +68,8 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
   const [evDay, setEvDay] = useState('')
   const [evDate, setEvDate] = useState('')
   const [evRepeat, setEvRepeat] = useState<'once' | 'monthly' | 'yearly'>('once')
+  const [listFilter, setListFilter] = useState<ListFilter>('all')
+  const [listSearch, setListSearch] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -115,9 +122,26 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
     }
     return event.repeat === 'monthly' || event.repeat === 'yearly'
   }).sort((a, b) => {
-    const dayA = a.date ? new Date(`${a.date}T12:00:00`).getDate() : a.day || 1
-    const dayB = b.date ? new Date(`${b.date}T12:00:00`).getDate() : b.day || 1
-    return dayA - dayB
+    const dayA = getEventDay(a)
+    const dayB = getEventDay(b)
+    if (dayA !== dayB) return dayA - dayB
+    return a.description.localeCompare(b.description)
+  })
+
+  const filteredUpcomingEvents = upcomingEvents.filter((event) => {
+    const tone = getEventTone(event)
+    const matchesFilter = listFilter === 'all'
+      || (listFilter === 'reminder' && tone === 'reminder')
+      || (listFilter === 'income' && tone === 'income')
+      || (listFilter === 'expense' && tone === 'expense')
+
+    const search = listSearch.trim().toLowerCase()
+    const matchesSearch = !search
+      || event.description.toLowerCase().includes(search)
+      || getEventLabel(event).toLowerCase().includes(search)
+      || String(getEventDay(event)).includes(search)
+
+    return matchesFilter && matchesSearch
   })
 
   function openDay(day: number) {
@@ -236,6 +260,12 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
           ))}
         </div>
 
+        <div className="calendar-legend">
+          <span className="calendar-legend-item"><span className="calendar-legend-dot income" /> Receita</span>
+          <span className="calendar-legend-item"><span className="calendar-legend-dot expense" /> Despesa</span>
+          <span className="calendar-legend-item"><span className="calendar-legend-dot reminder" /> Lembrete</span>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)' }}>
           {Array.from({ length: firstDow }, (_, index) => (
             <div key={`p${index}`} className="cal-day" style={{ opacity: 0.22 }}>
@@ -247,9 +277,30 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
             const day = index + 1
             const isToday = now.getDate() === day && now.getMonth() === month && now.getFullYear() === year
             const dayEvents = evMap[day] || []
+            const hasIncome = dayEvents.some(event => getEventTone(event) === 'income')
+            const hasExpense = dayEvents.some(event => getEventTone(event) === 'expense')
+            const hasReminder = dayEvents.some(event => getEventTone(event) === 'reminder')
+            const toneCount = [hasIncome, hasExpense, hasReminder].filter(Boolean).length
+            const toneClass = toneCount > 1
+              ? ' mixed-day'
+              : hasIncome
+                ? ' income-day'
+                : hasExpense
+                  ? ' expense-day'
+                  : hasReminder
+                    ? ' reminder-day'
+                    : ''
+
             return (
-              <div key={day} className={`cal-day${isToday ? ' today' : ''}`} onClick={() => openDay(day)}>
+              <div key={day} className={`cal-day${isToday ? ' today' : ''}${toneClass}`} onClick={() => openDay(day)}>
                 <div className="day-num">{day}</div>
+                {(hasIncome || hasExpense || hasReminder) && (
+                  <div className="day-accent-bar">
+                    {hasIncome && <span className="day-accent income" />}
+                    {hasExpense && <span className="day-accent expense" />}
+                    {hasReminder && <span className="day-accent reminder" />}
+                  </div>
+                )}
                 {dayEvents.slice(0, 3).map((event, eventIndex) => (
                   <div key={eventIndex} className={`day-evt ${getEventTone(event)}${event.transaction_id ? ' installment' : ''}`}>
                     {getEventLabel(event)}: {event.description.slice(0, 9)}
@@ -278,17 +329,32 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
 
         <div className="card" style={{ flex: 1 }}>
           <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '15px', fontWeight: 700 }}>Eventos do mes</span>
+            <span style={{ fontSize: '15px', fontWeight: 700 }}>Lancamentos de {MONTHS[month]}</span>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <button className="btn-ghost" onClick={exportMonthToGoogleCalendar}>Google Agenda (.ics)</button>
               <button className="btn-primary" onClick={() => openDay(newDay)}>+ Evento</button>
             </div>
           </div>
+          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <input
+              className="fi"
+              placeholder="Filtrar por descricao, tipo ou dia..."
+              value={listSearch}
+              onChange={(event) => setListSearch(event.target.value)}
+            />
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button className={listFilter === 'all' ? 'btn-primary' : 'btn-ghost'} onClick={() => setListFilter('all')}>Todos</button>
+              <button className={listFilter === 'income' ? 'btn-primary' : 'btn-ghost'} onClick={() => setListFilter('income')}>Receitas</button>
+              <button className={listFilter === 'expense' ? 'btn-primary' : 'btn-ghost'} onClick={() => setListFilter('expense')}>Despesas</button>
+              <button className={listFilter === 'reminder' ? 'btn-primary' : 'btn-ghost'} onClick={() => setListFilter('reminder')}>Lembretes</button>
+            </div>
+          </div>
           <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '420px', overflowY: 'auto' }}>
-            {upcomingEvents.length === 0 ? (
+            {filteredUpcomingEvents.length === 0 ? (
               <div style={{ color: 'var(--text3)', fontSize: '14px', textAlign: 'center', padding: '18px 0' }}>Nenhum evento neste mes.</div>
-            ) : upcomingEvents.map((event) => {
-              const day = event.date ? new Date(`${event.date}T12:00:00`).getDate() : event.day || 1
+            ) : filteredUpcomingEvents.map((event) => {
+              const day = getEventDay(event)
+              const tone = getEventTone(event)
               const calendarUrl = buildGCalUrl({
                 title: `${getEventLabel(event)}: ${event.description}`,
                 date: event.date || `${year}-${String(month + 1).padStart(2, '0')}-${String(Math.min(day, 28)).padStart(2, '0')}`,
@@ -296,8 +362,8 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
               })
 
               return (
-                <div key={event.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '12px', background: 'var(--bg4)', border: '1px solid var(--border)' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '999px', background: getEventTone(event) === 'reminder' ? 'var(--orange)' : event.type === 'income' ? 'var(--green)' : 'var(--red)' }} />
+                <div key={event.id} className={`calendar-event-card ${tone}`}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '999px', background: tone === 'reminder' ? 'var(--orange)' : tone === 'income' ? 'var(--green)' : 'var(--red)', flexShrink: 0 }} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '14px', fontWeight: 600 }}>{event.description}</div>
                     <div style={{ fontSize: '12px', color: 'var(--text3)' }}>
@@ -305,7 +371,7 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div className="hide-val" style={{ fontWeight: 700, color: event.type === 'income' ? 'var(--green)' : 'var(--red)' }}>
+                    <div className="hide-val" style={{ fontWeight: 700, color: tone === 'reminder' ? 'var(--orange)' : tone === 'income' ? 'var(--green)' : 'var(--red)' }}>
                       <span>{event.value ? formatBRL(event.value) : 'Lembrete'}</span>
                     </div>
                     <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '6px' }}>

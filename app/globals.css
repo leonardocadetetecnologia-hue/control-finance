@@ -733,11 +733,29 @@ select.fi {
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 0.12s, box-shadow 0.12s, transform 0.12s;
 }
 
 .cal-day:hover {
   background: var(--bg4);
+  transform: translateY(-1px);
+}
+
+.cal-day.income-day {
+  background: linear-gradient(180deg, rgba(0, 150, 74, 0.08), transparent 74%);
+}
+
+.cal-day.expense-day {
+  background: linear-gradient(180deg, rgba(217, 0, 32, 0.08), transparent 74%);
+}
+
+.cal-day.reminder-day {
+  background: linear-gradient(180deg, rgba(255, 145, 0, 0.1), transparent 74%);
+}
+
+.cal-day.mixed-day {
+  background:
+    linear-gradient(135deg, rgba(0, 150, 74, 0.06), rgba(217, 0, 32, 0.06) 50%, rgba(255, 145, 0, 0.06));
 }
 
 .cal-day:nth-child(7n) {
@@ -760,6 +778,31 @@ select.fi {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.day-accent-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.day-accent {
+  width: 18px;
+  height: 4px;
+  border-radius: 999px;
+  opacity: 0.95;
+}
+
+.day-accent.income {
+  background: var(--green);
+}
+
+.day-accent.expense {
+  background: var(--red);
+}
+
+.day-accent.reminder {
+  background: var(--orange);
 }
 
 .day-evt {
@@ -790,6 +833,64 @@ select.fi {
 
 .day-evt.installment {
   border-left: 2px solid var(--purple);
+}
+
+.calendar-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg3);
+}
+
+.calendar-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.calendar-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.calendar-legend-dot.income {
+  background: var(--green);
+}
+
+.calendar-legend-dot.expense {
+  background: var(--red);
+}
+
+.calendar-legend-dot.reminder {
+  background: var(--orange);
+}
+
+.calendar-event-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+}
+
+.calendar-event-card.income {
+  box-shadow: inset 3px 0 0 var(--green);
+}
+
+.calendar-event-card.expense {
+  box-shadow: inset 3px 0 0 var(--red);
+}
+
+.calendar-event-card.reminder {
+  box-shadow: inset 3px 0 0 var(--orange);
 }
 
 .inst-row {
