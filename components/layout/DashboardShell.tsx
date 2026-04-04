@@ -1,13 +1,13 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { apiRequest } from '@/lib/api'
 import type { CalendarEvent, IncomeSource, Metrics, Transaction } from '@/lib/types'
-import { buildMetrics, buildUpcomingReminders } from '@/lib/utils/finance'
-import { formatBRL, formatDateShort, MONTHS, todayISO } from '@/lib/utils/format'
+import { buildMetrics, buildMonthRows, type ExpandedFinanceRow, buildUpcomingReminders } from '@/lib/utils/finance'
+import { formatBRL, formatDate, formatDateShort, MONTHS, todayISO } from '@/lib/utils/format'
 import { formatMoneyInput, parseMoneyInput, sanitizeMoneyDraft } from '@/lib/utils/money'
 
 interface AppCtx {
@@ -60,6 +60,8 @@ const PREFETCH_ROUTES = [
   '/calendar?new=1',
 ]
 
+type MetricDetailKey = 'income' | 'expense' | 'toReceive' | 'toPay'
+
 export default function DashboardShell({
   children,
   user,
@@ -86,6 +88,8 @@ export default function DashboardShell({
   const [incomeValue, setIncomeValue] = useState('')
   const [incomeDay, setIncomeDay] = useState('')
   const [savingIncome, setSavingIncome] = useState(false)
+  const [metricDetail, setMetricDetail] = useState<MetricDetailKey | null>(null)
+  const [refreshing, startRefresh] = useTransition()
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('fx_theme') || 'dark'
@@ -141,6 +145,12 @@ export default function DashboardShell({
     router.refresh()
   }
 
+  function refreshFinancialData() {
+    startRefresh(() => {
+      router.refresh()
+    })
+  }
+
   function dismissIncomeOnboarding() {
     localStorage.setItem(`fc_income_onboarding_dismissed_${user.email || 'anon'}`, 'true')
     setShowIncomeOnboarding(false)
@@ -179,9 +189,52 @@ export default function DashboardShell({
     }
   }
 
+  const monthRows = useMemo(() => buildMonthRows(transactions, incomeSources, year, month), [transactions, incomeSources, year, month])
   const metrics = useMemo<Metrics>(() => buildMetrics(transactions, year, month, incomeSources), [transactions, year, month, incomeSources])
   const reminders = useMemo(() => buildUpcomingReminders(transactions, events, 4), [transactions, events])
   const expenseMode = pathname === '/transactions' && searchParams.get('type') === 'expense'
+  const today = todayISO()
+  const metricDefinitions: Array<{
+    label: string
+    value: number
+    className: string
+    detailKey: MetricDetailKey | null
+  }> = [
+    { label: 'Saldo', value: metrics.balance, className: '', detailKey: null },
+    { label: 'Receitas', value: metrics.income, className: 'positive', detailKey: 'income' },
+    { label: 'Despesas', value: metrics.expenses, className: 'negative', detailKey: 'expense' },
+    { label: 'A receber', value: metrics.toReceive, className: 'positive', detailKey: 'toReceive' },
+    { label: 'A pagar', value: metrics.toPay, className: 'warning', detailKey: 'toPay' },
+  ]
+
+  const metricDetailConfig = useMemo(() => {
+    const base = {
+      income: {
+        title: 'Receitas do mes',
+        subtitle: 'Todos os creditos previstos ou recebidos no mes selecionado.',
+        rows: monthRows.filter((row) => row.type === 'income'),
+      },
+      expense: {
+        title: 'Despesas do mes',
+        subtitle: 'Todos os debitos previstos ou confirmados no mes selecionado.',
+        rows: monthRows.filter((row) => row.type === 'expense'),
+      },
+      toReceive: {
+        title: 'Valores a receber',
+        subtitle: 'Receitas futuras a partir de hoje dentro do mes selecionado.',
+        rows: monthRows.filter((row) => row.type === 'income' && row.date >= today),
+      },
+      toPay: {
+        title: 'Valores a pagar',
+        subtitle: 'Debitos futuros a partir de hoje dentro do mes selecionado.',
+        rows: monthRows.filter((row) => row.type === 'expense' && row.date >= today && row.status !== 'Paga'),
+      },
+    } satisfies Record<MetricDetailKey, { title: string; subtitle: string; rows: ExpandedFinanceRow[] }>
+
+    return base
+  }, [monthRows, today])
+
+  const activeMetricDetail = metricDetail ? metricDetailConfig[metricDetail] : null
 
   return (
     <AppContext.Provider value={{ month, year, setMonth, setYear, hidden, toggleHidden, theme, setTheme: changeTheme, incomeSources }}>
@@ -203,6 +256,9 @@ export default function DashboardShell({
             <div className="shell-actions">
               <Link className="btn-primary shell-action-btn" href="/transactions?new=1" prefetch>+ Transacao</Link>
               <Link className="btn-ghost shell-action-btn" href="/calendar?new=1" prefetch>+ Evento</Link>
+              <button className="btn-ghost shell-action-btn" onClick={refreshFinancialData} disabled={refreshing}>
+                {refreshing ? 'Atualizando...' : 'Atualizar'}
+              </button>
               <button className="shell-icon-btn" onClick={toggleHidden} title={hidden ? 'Mostrar valores' : 'Ocultar valores'}>
                 {hidden ? 'Mostrar' : 'Ocultar'}
               </button>
@@ -223,20 +279,35 @@ export default function DashboardShell({
 
           <div className="shell-summary-row">
             <div className="shell-metrics">
-              {[
-                { label: 'Saldo', value: metrics.balance, className: '' },
-                { label: 'Receitas', value: metrics.income, className: 'positive' },
-                { label: 'Despesas', value: metrics.expenses, className: 'negative' },
-                { label: 'A receber', value: metrics.toReceive, className: 'positive' },
-                { label: 'A pagar', value: metrics.toPay, className: 'warning' },
-              ].map((item) => (
-                <div key={item.label} className="metric-chip">
-                  <div className="metric-label">{item.label}</div>
-                  <div className={`metric-value hide-val ${item.className}`}>
-                    <span>{formatBRL(item.value)}</span>
-                  </div>
-                </div>
-              ))}
+              {metricDefinitions.map((item) => {
+                if (!item.detailKey) {
+                  return (
+                    <div key={item.label} className="metric-chip">
+                      <div className="metric-label">{item.label}</div>
+                      <div className={`metric-value hide-val ${item.className}`}>
+                        <span>{formatBRL(item.value)}</span>
+                      </div>
+                    </div>
+                  )
+                }
+
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className="metric-chip"
+                    onClick={() => setMetricDetail(item.detailKey)}
+                    style={{ textAlign: 'left', cursor: 'pointer' }}
+                    title={`Ver detalhes de ${item.label.toLowerCase()}`}
+                  >
+                    <div className="metric-label">{item.label}</div>
+                    <div className={`metric-value hide-val ${item.className}`}>
+                      <span>{formatBRL(item.value)}</span>
+                    </div>
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text3)' }}>Clique para detalhar</div>
+                  </button>
+                )
+              })}
             </div>
 
             <div className="shell-side-info">
@@ -337,6 +408,47 @@ export default function DashboardShell({
                 <button className="btn-primary" onClick={saveIncomeOnboarding} disabled={savingIncome}>
                   {savingIncome ? 'Salvando...' : 'Salvar renda fixa'}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeMetricDetail && (
+          <div className="modal-overlay" onClick={(event) => { if (event.target === event.currentTarget) setMetricDetail(null) }}>
+            <div className="modal-box" style={{ width: '760px' }}>
+              <div style={{ padding: '20px 22px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                <div>
+                  <div className="font-bebas" style={{ fontSize: '24px' }}>{activeMetricDetail.title}</div>
+                  <div style={{ marginTop: '4px', color: 'var(--text3)', fontSize: '13px' }}>
+                    {activeMetricDetail.subtitle} {MONTHS[month]} {year}.
+                  </div>
+                </div>
+                <button className="btn-ghost" onClick={() => setMetricDetail(null)}>Fechar</button>
+              </div>
+
+              <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '68vh', overflowY: 'auto' }}>
+                {activeMetricDetail.rows.length === 0 ? (
+                  <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text3)' }}>
+                    Nenhum lancamento encontrado para este filtro.
+                  </div>
+                ) : activeMetricDetail.rows.map((row, index) => (
+                  <div key={`${row.date}-${row.description}-${index}`} className="card" style={{ padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)' }}>{row.description}</div>
+                        <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text2)' }}>
+                          {row.category} - {row.recMode} - {row.status}
+                        </div>
+                        <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--text3)' }}>
+                          Data: {formatDate(row.date)}
+                        </div>
+                      </div>
+                      <div className="hide-val" style={{ fontSize: '16px', fontWeight: 700, color: row.type === 'income' ? 'var(--green)' : 'var(--red)', whiteSpace: 'nowrap' }}>
+                        <span>{formatBRL(row.value)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
