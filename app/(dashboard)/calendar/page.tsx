@@ -1,11 +1,14 @@
 import CalendarClient from '@/components/calendar/CalendarClient'
-import { getCachedEvents, getRequiredUser } from '@/lib/server-data'
+import { getCachedEvents, getCachedTransactions, getRequiredUser } from '@/lib/server-data'
 
 export default async function CalendarPage() {
   const user = await getRequiredUser()
   const userId = user.id
 
-  const events = await getCachedEvents(userId)
+  const [events, transactions] = await Promise.all([
+    getCachedEvents(userId),
+    getCachedTransactions(userId),
+  ])
 
-  return <CalendarClient initialEvents={events} />
+  return <CalendarClient initialEvents={events} initialTransactions={transactions} />
 }

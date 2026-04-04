@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { apiRequest } from '@/lib/api'
 import { formatBRL, MONTHS } from '@/lib/utils/format'
 import { buildGCalUrl, downloadFinanceCalendarIcs } from '@/lib/utils/gcal'
 import { formatMoneyInput, parseMoneyInput, sanitizeMoneyDraft } from '@/lib/utils/money'
-import type { CalendarEvent } from '@/lib/types'
+import { expandTransactionsForMonth } from '@/lib/utils/finance'
+import type { CalendarEvent, Installment, Transaction } from '@/lib/types'
 
 type EventKind = 'payment' | 'receipt' | 'reminder_charge' | 'reminder_receive'
 type ListFilter = 'all' | 'income' | 'expense' | 'reminder'
@@ -50,7 +51,13 @@ function getEventDay(event: CalendarEvent) {
   return event.date ? new Date(`${event.date}T12:00:00`).getDate() : event.day || 1
 }
 
-export default function CalendarClient({ initialEvents }: { initialEvents: CalendarEvent[] }) {
+export default function CalendarClient({
+  initialEvents,
+  initialTransactions,
+}: {
+  initialEvents: CalendarEvent[]
+  initialTransactions: (Transaction & { installments?: Installment[] })[]
+}) {
   const now = new Date()
   const router = useRouter()
   const pathname = usePathname()
@@ -99,8 +106,33 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
   const firstDow = new Date(year, month, 1).getDay()
   const prevDim = new Date(year, month, 0).getDate()
 
+  const visibleEvents = useMemo(() => {
+    const existingTransactionDates = new Set(
+      events
+        .filter(event => event.transaction_id)
+        .map(event => `${event.transaction_id}|${getEventDateForMonth(event, year, month)}`),
+    )
+
+    const derivedEvents = expandTransactionsForMonth(initialTransactions, year, month)
+      .filter(row => row.transactionId)
+      .filter(row => !existingTransactionDates.has(`${row.transactionId}|${row.date}`))
+      .map<CalendarEvent>((row, index) => ({
+        id: `derived-${row.transactionId}-${row.date}-${index}`,
+        user_id: '',
+        transaction_id: row.transactionId,
+        description: row.description,
+        value: row.value,
+        type: row.type,
+        repeat: 'once',
+        date: row.date,
+        category: row.category,
+      }))
+
+    return [...events, ...derivedEvents]
+  }, [events, initialTransactions, month, year])
+
   const evMap: Record<number, CalendarEvent[]> = {}
-  events.forEach(event => {
+  visibleEvents.forEach(event => {
     if (event.date) {
       const date = new Date(`${event.date}T12:00:00`)
       if (date.getMonth() === month && date.getFullYear() === year) {
@@ -115,7 +147,7 @@ export default function CalendarClient({ initialEvents }: { initialEvents: Calen
     }
   })
 
-  const upcomingEvents = events.filter(event => {
+  const upcomingEvents = visibleEvents.filter(event => {
     if (event.date) {
       const date = new Date(`${event.date}T12:00:00`)
       return date.getMonth() === month && date.getFullYear() === year
