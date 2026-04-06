@@ -42,6 +42,12 @@ function getEventLabel(event: CalendarEvent) {
   return kind === 'receipt' ? 'Recebimento' : 'Pagamento'
 }
 
+function getEventRecurrenceText(event: CalendarEvent) {
+  if (event.repeat === 'monthly') return 'Mensal'
+  if (event.repeat === 'yearly') return 'Anual'
+  return 'Unico'
+}
+
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate()
 }
@@ -88,6 +94,7 @@ export default function CalendarClient({
   const [events, setEvents] = useState(initialEvents)
   const [gcalConnected, setGcalConnected] = useState(false)
   const [showEventModal, setShowEventModal] = useState(false)
+  const [editingEventId, setEditingEventId] = useState<string | null>(null)
   const [newDay, setNewDay] = useState(1)
   const [eventKind, setEventKind] = useState<EventKind>('payment')
   const [evDesc, setEvDesc] = useState('')
@@ -120,6 +127,17 @@ export default function CalendarClient({
     }
     setMonth(nextMonth)
     setYear(nextYear)
+  }
+
+  function closeEventModal() {
+    setShowEventModal(false)
+    setEditingEventId(null)
+    setEventKind('payment')
+    setEvDesc('')
+    setEvVal('')
+    setEvDay('')
+    setEvDate('')
+    setEvRepeat('once')
   }
 
   const dim = new Date(year, month + 1, 0).getDate()
@@ -227,9 +245,29 @@ export default function CalendarClient({
   })
 
   function openDay(day: number) {
+    setEditingEventId(null)
     setNewDay(day)
     setEvDay(String(day))
     setEvDate(`${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
+    setEventKind('payment')
+    setEvDesc('')
+    setEvVal('')
+    setEvRepeat('once')
+    setShowEventModal(true)
+  }
+
+  function openEditEvent(event: CalendarEvent) {
+    if (event.transaction_id || event.id.startsWith('source-')) return
+
+    const day = getEventDay(event)
+    setEditingEventId(event.id)
+    setNewDay(day)
+    setEventKind(getEventKind(event))
+    setEvDesc(event.description)
+    setEvVal(event.value ? formatMoneyInput(event.value) : '')
+    setEvRepeat(event.repeat)
+    setEvDay(event.repeat === 'monthly' ? String(event.day || day) : String(day))
+    setEvDate(event.date || `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
     setShowEventModal(true)
   }
 
@@ -263,27 +301,30 @@ export default function CalendarClient({
             : 'Outros',
       }
 
-      if (evRepeat === 'once') payload.date = evDate
-      else payload.day = Number(evDay || newDay)
+      if (evRepeat === 'monthly') payload.day = Number(evDay || newDay)
+      else payload.date = evDate
 
-      const data = await apiRequest<CalendarEvent>('/api/events', {
-        method: 'POST',
+      const endpoint = editingEventId ? `/api/events/${editingEventId}` : '/api/events'
+      const method = editingEventId ? 'PATCH' : 'POST'
+      const data = await apiRequest<CalendarEvent>(endpoint, {
+        method,
         body: JSON.stringify(payload),
       })
 
-      setEvents(prev => [...prev, data])
-      setShowEventModal(false)
-      setEvDesc('')
-      setEvVal('')
-      setEventKind('payment')
-      toast('Evento salvo')
+      setEvents(prev => (
+        editingEventId
+          ? prev.map(event => (event.id === editingEventId ? data : event))
+          : [...prev, data]
+      ))
+      closeEventModal()
+      toast(editingEventId ? 'Evento atualizado' : 'Evento salvo')
 
       if (gcalConnected) {
         const calendarUrl = buildGCalUrl({
           title: `${getEventLabel({ ...data, category: payload.category })}: ${evDesc}`,
-          date: evDate || `${year}-${String(month + 1).padStart(2, '0')}-${String(Number(evDay) || 1).padStart(2, '0')}`,
+          date: data.date || evDate || `${year}-${String(month + 1).padStart(2, '0')}-${String(Number(evDay) || 1).padStart(2, '0')}`,
           description: value > 0 ? `Valor: ${formatBRL(value)}` : 'Lembrete criado no Finance Control',
-          recurrence: evRepeat === 'monthly' ? 'MONTHLY' : undefined,
+          recurrence: evRepeat === 'monthly' ? 'MONTHLY' : evRepeat === 'yearly' ? 'YEARLY' : undefined,
         })
         window.open(calendarUrl, '_blank')
       }
@@ -326,7 +367,7 @@ export default function CalendarClient({
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: '18px' }}>
+    <div className="calendar-layout">
       <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: '18px', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: '1px solid var(--border)' }}>
           <span className="font-bebas" style={{ fontSize: '20px' }}>{MONTHS[month]} {year}</span>
@@ -401,7 +442,7 @@ export default function CalendarClient({
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <div className="calendar-sidebar">
         <div className="card" style={{ padding: '16px' }}>
           <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: '10px' }}>Google Agenda</div>
           <button className="btn-ghost" style={{ width: '100%' }} onClick={() => setGcalConnected(prev => !prev)}>
@@ -441,24 +482,30 @@ export default function CalendarClient({
                 title: `${getEventLabel(event)}: ${event.description}`,
                 date: event.date || `${year}-${String(month + 1).padStart(2, '0')}-${String(Math.min(day, getDaysInMonth(year, month))).padStart(2, '0')}`,
                 description: event.value ? `Valor: ${formatBRL(event.value)}` : 'Lembrete do Finance Control',
+                recurrence: event.repeat === 'monthly' ? 'MONTHLY' : event.repeat === 'yearly' ? 'YEARLY' : undefined,
               })
 
               return (
                 <div key={event.id} className={`calendar-event-card ${tone}`}>
-                  <div style={{ width: '10px', height: '10px', borderRadius: '999px', background: tone === 'reminder' ? 'var(--orange)' : tone === 'income' ? 'var(--green)' : 'var(--red)', flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600 }}>{event.description}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text3)' }}>
-                      {getEventLabel(event)} - dia {day} - {event.repeat === 'monthly' ? 'Mensal' : event.repeat === 'yearly' ? 'Anual' : 'Unico'}
+                  <div className="calendar-event-dot" style={{ background: tone === 'reminder' ? 'var(--orange)' : tone === 'income' ? 'var(--green)' : 'var(--red)' }} />
+                  <div className="calendar-event-main">
+                    <div className="calendar-event-title">{event.description}</div>
+                    <div className="calendar-event-meta">
+                      {getEventLabel(event)} - dia {day} - {getEventRecurrenceText(event)}
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div className="hide-val" style={{ fontWeight: 700, color: tone === 'reminder' ? 'var(--orange)' : tone === 'income' ? 'var(--green)' : 'var(--red)' }}>
+                  <div className="calendar-event-side">
+                    <div className="hide-val calendar-event-value" style={{ color: tone === 'reminder' ? 'var(--orange)' : tone === 'income' ? 'var(--green)' : 'var(--red)' }}>
                       <span>{event.value ? formatBRL(event.value) : 'Lembrete'}</span>
                     </div>
-                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '6px' }}>
+                    <div className="calendar-event-actions">
                       <a className="btn-ghost" href={calendarUrl} target="_blank" rel="noreferrer">Google Agenda</a>
-                      {!event.transaction_id && !event.id.startsWith('source-') && <button className="btn-ghost" onClick={() => delEvent(event.id)}>Excluir</button>}
+                      {!event.transaction_id && !event.id.startsWith('source-') && (
+                        <>
+                          <button className="btn-ghost" onClick={() => openEditEvent(event)}>Editar</button>
+                          <button className="btn-ghost" onClick={() => delEvent(event.id)}>Excluir</button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -472,8 +519,8 @@ export default function CalendarClient({
         <div className="modal-overlay" onClick={event => { if (event.target === event.currentTarget) setShowEventModal(false) }}>
           <div className="modal-box">
             <div style={{ padding: '20px 22px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span className="font-bebas" style={{ fontSize: '24px' }}>Novo evento - dia {newDay}</span>
-              <button className="btn-ghost" onClick={() => setShowEventModal(false)}>Fechar</button>
+              <span className="font-bebas" style={{ fontSize: '24px' }}>{editingEventId ? 'Editar evento' : `Novo evento - dia ${newDay}`}</span>
+              <button className="btn-ghost" onClick={closeEventModal}>Fechar</button>
             </div>
 
             <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -513,22 +560,22 @@ export default function CalendarClient({
                 </div>
               </div>
 
-              {evRepeat === 'once' ? (
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Data</label>
-                  <input className="fi" type="date" value={evDate} onChange={e => setEvDate(e.target.value)} />
-                </div>
-              ) : (
+              {evRepeat === 'monthly' ? (
                 <div>
                   <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Dia da recorrencia</label>
                   <input className="fi" type="number" min="1" max="31" value={evDay} onChange={e => setEvDay(e.target.value)} />
+                </div>
+              ) : (
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text2)' }}>Data</label>
+                  <input className="fi" type="date" value={evDate} onChange={e => setEvDate(e.target.value)} />
                 </div>
               )}
             </div>
 
             <div style={{ padding: '18px 22px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button className="btn-ghost" onClick={() => setShowEventModal(false)}>Cancelar</button>
-              <button className="btn-primary" onClick={saveEvent} disabled={saving}>{saving ? 'Salvando...' : 'Criar evento'}</button>
+              <button className="btn-ghost" onClick={closeEventModal}>Cancelar</button>
+              <button className="btn-primary" onClick={saveEvent} disabled={saving}>{saving ? 'Salvando...' : editingEventId ? 'Salvar alteracoes' : 'Criar evento'}</button>
             </div>
           </div>
         </div>

@@ -872,13 +872,80 @@ select.fi {
 }
 
 .calendar-event-card {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: flex-start;
   gap: 10px;
   padding: 10px 12px;
   border-radius: 12px;
   background: var(--bg4);
   border: 1px solid var(--border);
+}
+
+.calendar-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+}
+
+.calendar-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.calendar-event-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.calendar-event-main {
+  min-width: 0;
+}
+
+.calendar-event-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.calendar-event-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text3);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.calendar-event-side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.calendar-event-value {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.calendar-event-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.calendar-event-actions .btn-ghost {
+  padding-inline: 12px;
+  white-space: normal;
 }
 
 .calendar-event-card.income {
@@ -1012,6 +1079,10 @@ select.fi {
   .shell-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .calendar-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
@@ -1042,5 +1113,29 @@ select.fi {
 
   .metric-chip {
     min-height: auto;
+  }
+
+  .calendar-event-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .calendar-event-dot {
+    display: none;
+  }
+
+  .calendar-event-side {
+    align-items: stretch;
+  }
+
+  .calendar-event-value {
+    white-space: normal;
+  }
+
+  .calendar-event-actions {
+    justify-content: stretch;
+  }
+
+  .calendar-event-actions .btn-ghost {
+    width: 100%;
   }
 }
