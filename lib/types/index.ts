@@ -64,6 +64,15 @@ export interface IncomeSource {
   start_date: string
 }
 
+export interface CashflowSettlement {
+  id: string
+  user_id: string
+  transaction_id?: string
+  income_source_id?: string
+  occurrence_date: string
+  settled_at: string
+}
+
 export interface Goal {
   id: string
   user_id: string

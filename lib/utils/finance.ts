@@ -1,4 +1,12 @@
-import type { CalendarEvent, IncomeSource, Installment, Metrics, Transaction, TransactionType } from '@/lib/types'
+import type {
+  CalendarEvent,
+  CashflowSettlement,
+  IncomeSource,
+  Installment,
+  Metrics,
+  Transaction,
+  TransactionType,
+} from '@/lib/types'
 import { todayISO } from '@/lib/utils/format'
 
 export interface ExpandedFinanceRow {
@@ -11,6 +19,9 @@ export interface ExpandedFinanceRow {
   recMode: string
   transactionId?: string
   sourceId?: string
+  installmentId?: string
+  settled?: boolean
+  settlementId?: string
 }
 
 export interface ReminderItem {
@@ -42,6 +53,27 @@ function getDueDay(transaction: Transaction) {
   return transaction.dia_venc || new Date(`${transaction.date}T12:00:00`).getDate()
 }
 
+function buildSettlementLookup(settlements: CashflowSettlement[]) {
+  const map = new Map<string, CashflowSettlement>()
+
+  settlements.forEach((settlement) => {
+    if (settlement.transaction_id) {
+      map.set(`tx:${settlement.transaction_id}:${settlement.occurrence_date}`, settlement)
+    }
+    if (settlement.income_source_id) {
+      map.set(`income:${settlement.income_source_id}:${settlement.occurrence_date}`, settlement)
+    }
+  })
+
+  return map
+}
+
+function getSettlementStatus(type: TransactionType, date: string, settled: boolean, today: string) {
+  if (settled) return type === 'income' ? 'Recebido' : 'Quitado'
+  if (date < today) return type === 'income' ? 'A receber' : 'Em aberto'
+  return type === 'income' ? 'Previsto' : 'Agendado'
+}
+
 export function getMonthlyOccurrenceDate(transaction: Transaction, year: number, month: number) {
   return isoDateForMonth(year, month, getDueDay(transaction))
 }
@@ -56,26 +88,6 @@ export function incomeSourceOccursInMonth(source: IncomeSource, year: number, mo
   return targetId >= startId
 }
 
-export function expandIncomeSourcesForMonth(sources: IncomeSource[], year: number, month: number) {
-  const today = todayISO()
-  return sources
-    .filter(source => incomeSourceOccursInMonth(source, year, month))
-    .map<ExpandedFinanceRow>((source) => {
-      const occurrenceDate = getIncomeSourceOccurrenceDate(source, year, month)
-      return {
-        date: occurrenceDate,
-        description: source.name,
-        category: source.source_type || 'Renda',
-        type: 'income',
-        value: source.value,
-        status: occurrenceDate < today ? 'Recebida' : 'Agendada',
-        recMode: 'Renda fixa',
-        sourceId: source.id,
-      }
-    })
-    .sort((a, b) => a.date.localeCompare(b.date))
-}
-
 export function monthlyTransactionOccursInMonth(transaction: Transaction, year: number, month: number) {
   if (transaction.rec_mode !== 'monthly') return false
 
@@ -88,8 +100,46 @@ export function monthlyTransactionOccursInMonth(transaction: Transaction, year: 
   return targetId <= startId + transaction.dur_months - 1
 }
 
-export function expandTransactionsForMonth(transactions: (Transaction & { installments?: Installment[] })[], year: number, month: number) {
+export function expandIncomeSourcesForMonth(
+  sources: IncomeSource[],
+  year: number,
+  month: number,
+  settlements: CashflowSettlement[] = [],
+) {
   const today = todayISO()
+  const settlementLookup = buildSettlementLookup(settlements)
+
+  return sources
+    .filter(source => incomeSourceOccursInMonth(source, year, month))
+    .map<ExpandedFinanceRow>((source) => {
+      const occurrenceDate = getIncomeSourceOccurrenceDate(source, year, month)
+      const settlement = settlementLookup.get(`income:${source.id}:${occurrenceDate}`)
+      const settled = Boolean(settlement)
+
+      return {
+        date: occurrenceDate,
+        description: source.name,
+        category: source.source_type || 'Renda',
+        type: 'income',
+        value: source.value,
+        status: getSettlementStatus('income', occurrenceDate, settled, today),
+        recMode: 'Renda fixa',
+        sourceId: source.id,
+        settled,
+        settlementId: settlement?.id,
+      }
+    })
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+export function expandTransactionsForMonth(
+  transactions: (Transaction & { installments?: Installment[] })[],
+  year: number,
+  month: number,
+  settlements: CashflowSettlement[] = [],
+) {
+  const today = todayISO()
+  const settlementLookup = buildSettlementLookup(settlements)
   const rows: ExpandedFinanceRow[] = []
 
   transactions.forEach((transaction) => {
@@ -104,9 +154,11 @@ export function expandTransactionsForMonth(transactions: (Transaction & { instal
           category: transaction.category,
           type: transaction.type,
           value: installment.value,
-          status: installment.paid ? 'Paga' : installment.date < today ? 'Vencida' : 'Pendente',
+          status: installment.paid ? 'Quitado' : installment.date < today ? 'Em aberto' : 'Pendente',
           recMode: 'Parcelado',
           transactionId: transaction.id,
+          installmentId: installment.id,
+          settled: installment.paid,
         })
       })
       return
@@ -115,15 +167,20 @@ export function expandTransactionsForMonth(transactions: (Transaction & { instal
     if (transaction.rec_mode === 'monthly') {
       if (!monthlyTransactionOccursInMonth(transaction, year, month)) return
       const occurrenceDate = getMonthlyOccurrenceDate(transaction, year, month)
+      const settlement = settlementLookup.get(`tx:${transaction.id}:${occurrenceDate}`)
+      const settled = Boolean(settlement)
+
       rows.push({
         date: occurrenceDate,
         description: transaction.description,
         category: transaction.category,
         type: transaction.type,
         value: transaction.value,
-        status: occurrenceDate < today ? 'Recorrente' : 'Agendada',
+        status: getSettlementStatus(transaction.type, occurrenceDate, settled, today),
         recMode: transaction.dur_months ? 'Recorrente' : 'Recorrente sem fim',
         transactionId: transaction.id,
+        settled,
+        settlementId: settlement?.id,
       })
       return
     }
@@ -131,28 +188,79 @@ export function expandTransactionsForMonth(transactions: (Transaction & { instal
     const date = new Date(`${transaction.date}T12:00:00`)
     if (date.getFullYear() !== year || date.getMonth() !== month) return
 
+    const settlement = settlementLookup.get(`tx:${transaction.id}:${transaction.date}`)
+    const settled = Boolean(settlement)
+
     rows.push({
       date: transaction.date,
       description: transaction.description,
       category: transaction.category,
       type: transaction.type,
       value: transaction.value,
-      status: transaction.date < today ? 'Confirmada' : 'Agendada',
+      status: getSettlementStatus(transaction.type, transaction.date, settled, today),
       recMode: 'Avulso',
       transactionId: transaction.id,
+      settled,
+      settlementId: settlement?.id,
     })
   })
 
   return rows.sort((a, b) => a.date.localeCompare(b.date))
 }
 
+export function expandIncomeSourcesForRange(
+  sources: IncomeSource[],
+  from: string,
+  to: string,
+  settlements: CashflowSettlement[] = [],
+) {
+  const start = parseMonthId(from)
+  const end = parseMonthId(to)
+  const today = todayISO()
+  const settlementLookup = buildSettlementLookup(settlements)
+  const rows: ExpandedFinanceRow[] = []
+
+  sources.forEach((source) => {
+    const sourceStart = parseMonthId(source.start_date)
+    const rangeStart = Math.max(start, sourceStart)
+
+    for (let current = rangeStart; current <= end; current += 1) {
+      const yearValue = Math.floor(current / 12)
+      const monthValue = current % 12
+      const occurrenceDate = getIncomeSourceOccurrenceDate(source, yearValue, monthValue)
+      if (occurrenceDate < from || occurrenceDate > to) continue
+
+      const settlement = settlementLookup.get(`income:${source.id}:${occurrenceDate}`)
+      const settled = Boolean(settlement)
+
+      rows.push({
+        date: occurrenceDate,
+        description: source.name,
+        category: source.source_type || 'Renda',
+        type: 'income',
+        value: source.value,
+        status: getSettlementStatus('income', occurrenceDate, settled, today),
+        recMode: 'Renda fixa',
+        sourceId: source.id,
+        settled,
+        settlementId: settlement?.id,
+      })
+    }
+  })
+
+  return rows.sort((a, b) => b.date.localeCompare(a.date))
+}
+
 export function expandTransactionsForRange(
   transactions: (Transaction & { installments?: Installment[] })[],
   from: string,
   to: string,
+  settlements: CashflowSettlement[] = [],
 ) {
   const start = parseMonthId(from)
   const end = parseMonthId(to)
+  const today = todayISO()
+  const settlementLookup = buildSettlementLookup(settlements)
   const rows: ExpandedFinanceRow[] = []
 
   transactions.forEach((transaction) => {
@@ -165,9 +273,11 @@ export function expandTransactionsForRange(
           category: transaction.category,
           type: transaction.type,
           value: installment.value,
-          status: installment.paid ? 'Paga' : installment.date < todayISO() ? 'Vencida' : 'Pendente',
+          status: installment.paid ? 'Quitado' : installment.date < today ? 'Em aberto' : 'Pendente',
           recMode: 'Parcelado',
           transactionId: transaction.id,
+          installmentId: installment.id,
+          settled: installment.paid,
         })
       })
       return
@@ -183,30 +293,43 @@ export function expandTransactionsForRange(
       for (let current = rangeStart; current <= rangeEnd; current += 1) {
         const yearValue = Math.floor(current / 12)
         const monthValue = current % 12
+        const occurrenceDate = getMonthlyOccurrenceDate(transaction, yearValue, monthValue)
+        if (occurrenceDate < from || occurrenceDate > to) continue
+
+        const settlement = settlementLookup.get(`tx:${transaction.id}:${occurrenceDate}`)
+        const settled = Boolean(settlement)
+
         rows.push({
-          date: getMonthlyOccurrenceDate(transaction, yearValue, monthValue),
+          date: occurrenceDate,
           description: transaction.description,
           category: transaction.category,
           type: transaction.type,
           value: transaction.value,
-          status: 'Recorrente',
+          status: getSettlementStatus(transaction.type, occurrenceDate, settled, today),
           recMode: transaction.dur_months ? 'Recorrente' : 'Recorrente sem fim',
           transactionId: transaction.id,
+          settled,
+          settlementId: settlement?.id,
         })
       }
       return
     }
 
     if (transaction.date >= from && transaction.date <= to) {
+      const settlement = settlementLookup.get(`tx:${transaction.id}:${transaction.date}`)
+      const settled = Boolean(settlement)
+
       rows.push({
         date: transaction.date,
         description: transaction.description,
         category: transaction.category,
         type: transaction.type,
         value: transaction.value,
-        status: 'Confirmada',
+        status: getSettlementStatus(transaction.type, transaction.date, settled, today),
         recMode: 'Avulso',
         transactionId: transaction.id,
+        settled,
+        settlementId: settlement?.id,
       })
     }
   })
@@ -214,16 +337,49 @@ export function expandTransactionsForRange(
   return rows.sort((a, b) => b.date.localeCompare(a.date))
 }
 
+export function buildTimelineRows(
+  transactions: (Transaction & { installments?: Installment[] })[],
+  incomeSources: IncomeSource[],
+  settlements: CashflowSettlement[],
+  from: string,
+  to: string,
+) {
+  return [
+    ...expandTransactionsForRange(transactions, from, to, settlements),
+    ...expandIncomeSourcesForRange(incomeSources, from, to, settlements),
+  ].sort((a, b) => b.date.localeCompare(a.date))
+}
+
 export function buildMonthRows(
   transactions: (Transaction & { installments?: Installment[] })[],
   incomeSources: IncomeSource[],
   year: number,
   month: number,
+  settlements: CashflowSettlement[] = [],
 ) {
   return [
-    ...expandTransactionsForMonth(transactions, year, month),
-    ...expandIncomeSourcesForMonth(incomeSources, year, month),
+    ...expandTransactionsForMonth(transactions, year, month, settlements),
+    ...expandIncomeSourcesForMonth(incomeSources, year, month, settlements),
   ].sort((a, b) => a.date.localeCompare(b.date))
+}
+
+export function buildPendingDebitRows(
+  transactions: (Transaction & { installments?: Installment[] })[],
+  settlements: CashflowSettlement[],
+  referenceDate = todayISO(),
+) {
+  if (transactions.length === 0) return [] as ExpandedFinanceRow[]
+
+  const earliestDate = transactions.reduce((earliest, transaction) => {
+    const installmentDates = (transaction.installments || []).map((installment) => installment.date)
+    const transactionDates = [transaction.date, ...installmentDates]
+    const transactionEarliest = transactionDates.sort()[0] || transaction.date
+    return transactionEarliest < earliest ? transactionEarliest : earliest
+  }, referenceDate)
+
+  return expandTransactionsForRange(transactions, earliestDate, referenceDate, settlements)
+    .filter((row) => row.type === 'expense' && !row.settled && row.date < referenceDate)
+    .sort((a, b) => a.date.localeCompare(b.date))
 }
 
 export function buildMetrics(
@@ -231,13 +387,14 @@ export function buildMetrics(
   year: number,
   month: number,
   incomeSources: IncomeSource[] = [],
+  settlements: CashflowSettlement[] = [],
 ): Metrics {
-  const rows = buildMonthRows(transactions, incomeSources, year, month)
+  const rows = buildMonthRows(transactions, incomeSources, year, month, settlements)
   const today = todayISO()
   const income = rows.filter(row => row.type === 'income').reduce((sum, row) => sum + row.value, 0)
   const expenses = rows.filter(row => row.type === 'expense').reduce((sum, row) => sum + row.value, 0)
-  const toReceive = rows.filter(row => row.type === 'income' && row.date >= today).reduce((sum, row) => sum + row.value, 0)
-  const toPay = rows.filter(row => row.type === 'expense' && row.date >= today && row.status !== 'Paga').reduce((sum, row) => sum + row.value, 0)
+  const toReceive = rows.filter(row => row.type === 'income' && row.date >= today && !row.settled).reduce((sum, row) => sum + row.value, 0)
+  const toPay = rows.filter(row => row.type === 'expense' && row.date >= today && !row.settled).reduce((sum, row) => sum + row.value, 0)
 
   return {
     balance: income - expenses,

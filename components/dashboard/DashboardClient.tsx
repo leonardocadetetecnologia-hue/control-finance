@@ -13,13 +13,13 @@ export default function DashboardClient({
   transactions: (Transaction & { installments?: Installment[] })[]
   categories: Category[]
 }) {
-  const { month, year, incomeSources } = useApp()
+  const { month, year, incomeSources, cashflowSettlements } = useApp()
 
   function getCategory(name: string) {
     return categories.find(category => category.name === name) || { emoji: '📦', color: '#555' }
   }
 
-  const monthRows = useMemo(() => buildMonthRows(transactions, incomeSources, year, month), [transactions, incomeSources, year, month])
+  const monthRows = useMemo(() => buildMonthRows(transactions, incomeSources, year, month, cashflowSettlements), [transactions, incomeSources, year, month, cashflowSettlements])
   const income = monthRows.filter(row => row.type === 'income').reduce((sum, row) => sum + row.value, 0)
   const expenses = monthRows.filter(row => row.type === 'expense').reduce((sum, row) => sum + row.value, 0)
 

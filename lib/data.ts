@@ -1,4 +1,4 @@
-import type { CalendarEvent, Category, Goal, IncomeSource, Installment, Transaction } from '@/lib/types'
+import type { CalendarEvent, CashflowSettlement, Category, Goal, IncomeSource, Installment, Transaction } from '@/lib/types'
 import { sql } from '@/lib/db'
 
 type DbUser = {
@@ -14,6 +14,7 @@ type DbInstallment = Omit<Installment, 'value'> & { value: string | number; crea
 type DbEvent = Omit<CalendarEvent, 'value'> & { value: string | number; created_at?: string | Date }
 type DbIncome = Omit<IncomeSource, 'value'> & { value: string | number; created_at?: string | Date }
 type DbGoal = Omit<Goal, 'current_value' | 'target_value'> & { current_value: string | number; target_value: string | number; created_at?: string | Date }
+type DbSettlement = Omit<CashflowSettlement, 'settled_at'> & { transaction_id?: string | null; income_source_id?: string | null; settled_at: string | Date; created_at?: string | Date }
 
 function toIso(value: string | Date | undefined) {
   if (!value) return new Date().toISOString()
@@ -143,5 +144,23 @@ export async function getInstallments(userId: string): Promise<Installment[]> {
     value: toNumber(row.value),
     paid: row.paid,
     rolled_over: row.rolled_over,
+  }))
+}
+
+export async function getCashflowSettlements(userId: string): Promise<CashflowSettlement[]> {
+  const rows = await sql`
+    select id, user_id, transaction_id, income_source_id, occurrence_date, settled_at, created_at
+    from cashflow_settlements
+    where user_id = ${userId}
+    order by occurrence_date desc
+  ` as DbSettlement[]
+
+  return rows.map((row) => ({
+    id: row.id,
+    user_id: row.user_id,
+    transaction_id: row.transaction_id || undefined,
+    income_source_id: row.income_source_id || undefined,
+    occurrence_date: row.occurrence_date,
+    settled_at: toIso(row.settled_at),
   }))
 }

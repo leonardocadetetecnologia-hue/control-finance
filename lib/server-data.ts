@@ -2,6 +2,7 @@ import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import {
+  getCashflowSettlements,
   getCategories,
   getEvents,
   getGoals,
@@ -33,3 +34,4 @@ export const getCachedCategories = cache(async (userId: string) => getCategories
 export const getCachedIncomeSources = cache(async (userId: string) => getIncomeSources(userId))
 export const getCachedGoals = cache(async (userId: string) => getGoals(userId))
 export const getCachedInstallments = cache(async (userId: string) => getInstallments(userId))
+export const getCachedCashflowSettlements = cache(async (userId: string) => getCashflowSettlements(userId))

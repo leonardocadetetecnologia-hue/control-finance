@@ -1064,6 +1064,114 @@ select.fi {
   vertical-align: middle;
 }
 
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 16px 94px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.timeline-item.urgent .timeline-card {
+  border-color: rgba(255, 145, 0, 0.4);
+}
+
+.timeline-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  margin-top: 18px;
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.03);
+}
+
+.timeline-date {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+  padding-top: 14px;
+}
+
+.timeline-card {
+  padding: 14px 16px;
+}
+
+.timeline-card-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.timeline-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.timeline-meta {
+  margin-top: 5px;
+  font-size: 13px;
+  color: var(--text3);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.timeline-value {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.timeline-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.timeline-status-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.timeline-status-badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.timeline-status-badge.settled {
+  background: rgba(0, 150, 74, 0.12);
+  color: var(--green);
+}
+
+.timeline-status-badge.pending {
+  background: rgba(255, 145, 0, 0.12);
+  color: var(--orange);
+}
+
+.timeline-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 @media (max-width: 1100px) {
   .shell-topline,
   .shell-summary-row,
@@ -1082,6 +1190,14 @@ select.fi {
 
   .calendar-layout {
     grid-template-columns: 1fr;
+  }
+
+  .timeline-item {
+    grid-template-columns: 16px minmax(0, 1fr);
+  }
+
+  .timeline-date {
+    display: none;
   }
 }
 
@@ -1136,6 +1252,32 @@ select.fi {
   }
 
   .calendar-event-actions .btn-ghost {
+    width: 100%;
+  }
+
+  .timeline-item {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .timeline-dot {
+    display: none;
+  }
+
+  .timeline-card-top {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-value {
+    white-space: normal;
+  }
+
+  .timeline-card-bottom {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .timeline-actions .btn-ghost {
     width: 100%;
   }
 }

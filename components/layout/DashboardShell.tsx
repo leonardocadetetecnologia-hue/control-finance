@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { apiRequest } from '@/lib/api'
-import type { CalendarEvent, IncomeSource, Metrics, Transaction } from '@/lib/types'
+import type { CalendarEvent, CashflowSettlement, IncomeSource, Metrics, Transaction } from '@/lib/types'
 import { buildMetrics, buildMonthRows, type ExpandedFinanceRow, buildUpcomingReminders } from '@/lib/utils/finance'
 import { formatBRL, formatDate, formatDateShort, MONTHS, todayISO } from '@/lib/utils/format'
 import { formatMoneyInput, parseMoneyInput, sanitizeMoneyDraft } from '@/lib/utils/money'
@@ -20,6 +20,7 @@ interface AppCtx {
   theme: string
   setTheme: (theme: string) => void
   incomeSources: IncomeSource[]
+  cashflowSettlements: CashflowSettlement[]
 }
 
 const AppContext = createContext<AppCtx>({
@@ -32,6 +33,7 @@ const AppContext = createContext<AppCtx>({
   theme: 'dark',
   setTheme: () => {},
   incomeSources: [],
+  cashflowSettlements: [],
 })
 export const useApp = () => useContext(AppContext)
 
@@ -68,12 +70,14 @@ export default function DashboardShell({
   transactions,
   events,
   incomeSources,
+  cashflowSettlements,
 }: {
   children: React.ReactNode
   user: { email?: string | null; name?: string | null }
   transactions: Transaction[]
   events: CalendarEvent[]
   incomeSources: IncomeSource[]
+  cashflowSettlements: CashflowSettlement[]
 }) {
   const now = new Date()
   const router = useRouter()
@@ -189,8 +193,8 @@ export default function DashboardShell({
     }
   }
 
-  const monthRows = useMemo(() => buildMonthRows(transactions, incomeSources, year, month), [transactions, incomeSources, year, month])
-  const metrics = useMemo<Metrics>(() => buildMetrics(transactions, year, month, incomeSources), [transactions, year, month, incomeSources])
+  const monthRows = useMemo(() => buildMonthRows(transactions, incomeSources, year, month, cashflowSettlements), [transactions, incomeSources, year, month, cashflowSettlements])
+  const metrics = useMemo<Metrics>(() => buildMetrics(transactions, year, month, incomeSources, cashflowSettlements), [transactions, year, month, incomeSources, cashflowSettlements])
   const reminders = useMemo(() => buildUpcomingReminders(transactions, events, 4), [transactions, events])
   const expenseMode = pathname === '/transactions' && searchParams.get('type') === 'expense'
   const today = todayISO()
@@ -237,7 +241,7 @@ export default function DashboardShell({
   const activeMetricDetail = metricDetail ? metricDetailConfig[metricDetail] : null
 
   return (
-    <AppContext.Provider value={{ month, year, setMonth, setYear, hidden, toggleHidden, theme, setTheme: changeTheme, incomeSources }}>
+    <AppContext.Provider value={{ month, year, setMonth, setYear, hidden, toggleHidden, theme, setTheme: changeTheme, incomeSources, cashflowSettlements }}>
       <div className="shell-page">
         <header className="shell-header">
           <div className="shell-topline">
