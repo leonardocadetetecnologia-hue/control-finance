@@ -148,12 +148,22 @@ export async function getInstallments(userId: string): Promise<Installment[]> {
 }
 
 export async function getCashflowSettlements(userId: string): Promise<CashflowSettlement[]> {
-  const rows = await sql`
-    select id, user_id, transaction_id, income_source_id, occurrence_date, settled_at, created_at
-    from cashflow_settlements
-    where user_id = ${userId}
-    order by occurrence_date desc
-  ` as DbSettlement[]
+  let rows: DbSettlement[]
+
+  try {
+    rows = await sql`
+      select id, user_id, transaction_id, income_source_id, occurrence_date, settled_at, created_at
+      from cashflow_settlements
+      where user_id = ${userId}
+      order by occurrence_date desc
+    ` as DbSettlement[]
+  } catch (error: any) {
+    // Keep the app online if the settlement migration hasn't been applied yet.
+    if (String(error?.message || '').includes('cashflow_settlements')) {
+      return []
+    }
+    throw error
+  }
 
   return rows.map((row) => ({
     id: row.id,

@@ -72,6 +72,10 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })
     }
 
+    if (String(error?.message || '').includes('cashflow_settlements')) {
+      return NextResponse.json({ error: 'A atualizacao de quitacao ainda nao foi habilitada no banco. Rode o SQL da migracao no Neon.' }, { status: 503 })
+    }
+
     console.error(error)
     return NextResponse.json({ error: 'Nao foi possivel atualizar a quitacao do lancamento.' }, { status: 500 })
   }
