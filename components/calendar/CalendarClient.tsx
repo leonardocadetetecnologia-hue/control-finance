@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useApp } from '@/components/layout/DashboardShell'
 import { apiRequest } from '@/lib/api'
-import { formatBRL, MONTHS } from '@/lib/utils/format'
+import { formatBRL, MONTHS, normalizeDateOnly, parseDateAtNoon } from '@/lib/utils/format'
 import { buildGCalUrl, downloadFinanceCalendarIcs } from '@/lib/utils/gcal'
 import { formatMoneyInput, parseMoneyInput, sanitizeMoneyDraft } from '@/lib/utils/money'
 import { expandIncomeSourcesForMonth, expandTransactionsForMonth } from '@/lib/utils/finance'
@@ -54,26 +54,26 @@ function getDaysInMonth(year: number, month: number) {
 
 function getEventDateForMonth(event: CalendarEvent, year: number, month: number) {
   if (event.repeat === 'monthly') {
-    const sourceDate = event.date ? new Date(`${event.date}T12:00:00`) : null
+    const sourceDate = event.date ? parseDateAtNoon(event.date) : null
     const day = String(Math.min(event.day || sourceDate?.getDate() || 1, getDaysInMonth(year, month))).padStart(2, '0')
     return `${year}-${String(month + 1).padStart(2, '0')}-${day}`
   }
 
   if (event.repeat === 'yearly' && event.date) {
-    const sourceDate = new Date(`${event.date}T12:00:00`)
+    const sourceDate = parseDateAtNoon(event.date)
     const targetMonth = sourceDate.getMonth()
     const targetDay = String(Math.min(sourceDate.getDate(), getDaysInMonth(year, targetMonth))).padStart(2, '0')
     return `${year}-${String(targetMonth + 1).padStart(2, '0')}-${targetDay}`
   }
 
-  if (event.date) return event.date
+  if (event.date) return normalizeDateOnly(event.date)
 
   const day = String(Math.min(event.day || 1, getDaysInMonth(year, month))).padStart(2, '0')
   return `${year}-${String(month + 1).padStart(2, '0')}-${day}`
 }
 
 function getEventDay(event: CalendarEvent) {
-  return event.date ? new Date(`${event.date}T12:00:00`).getDate() : event.day || 1
+  return event.date ? parseDateAtNoon(event.date).getDate() : event.day || 1
 }
 
 export default function CalendarClient({
@@ -193,7 +193,7 @@ export default function CalendarClient({
         value: row.value,
         type: 'income',
         repeat: 'monthly',
-        day: new Date(`${row.date}T12:00:00`).getDate(),
+        day: parseDateAtNoon(row.date).getDate(),
         date: row.date,
         category: row.category,
       }))
@@ -206,7 +206,7 @@ export default function CalendarClient({
     const resolvedDate = getEventDateForMonth(event, year, month)
     if (!resolvedDate) return
 
-    const date = new Date(`${resolvedDate}T12:00:00`)
+    const date = parseDateAtNoon(resolvedDate)
     if (date.getMonth() === month && date.getFullYear() === year) {
       const day = date.getDate()
       if (!evMap[day]) evMap[day] = []
@@ -218,7 +218,7 @@ export default function CalendarClient({
     .map((event) => ({ ...event, date: getEventDateForMonth(event, year, month) }))
     .filter(event => {
       if (!event.date) return false
-      const date = new Date(`${event.date}T12:00:00`)
+      const date = parseDateAtNoon(event.date)
       return date.getMonth() === month && date.getFullYear() === year
     })
     .sort((a, b) => {
@@ -267,7 +267,7 @@ export default function CalendarClient({
     setEvVal(event.value ? formatMoneyInput(event.value) : '')
     setEvRepeat(event.repeat)
     setEvDay(event.repeat === 'monthly' ? String(event.day || day) : String(day))
-    setEvDate(event.date || `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
+    setEvDate(event.date ? normalizeDateOnly(event.date) : `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
     setShowEventModal(true)
   }
 

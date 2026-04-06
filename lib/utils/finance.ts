@@ -7,7 +7,7 @@ import type {
   Transaction,
   TransactionType,
 } from '@/lib/types'
-import { todayISO } from '@/lib/utils/format'
+import { normalizeDateOnly, parseDateAtNoon, todayISO } from '@/lib/utils/format'
 
 export interface ExpandedFinanceRow {
   date: string
@@ -45,12 +45,12 @@ function isoDateForMonth(year: number, month: number, day: number) {
 }
 
 function parseMonthId(date: string) {
-  const d = new Date(`${date}T12:00:00`)
+  const d = parseDateAtNoon(date)
   return monthId(d.getFullYear(), d.getMonth())
 }
 
 function getDueDay(transaction: Transaction) {
-  return transaction.dia_venc || new Date(`${transaction.date}T12:00:00`).getDate()
+  return transaction.dia_venc || parseDateAtNoon(transaction.date).getDate()
 }
 
 function buildSettlementLookup(settlements: CashflowSettlement[]) {
@@ -145,16 +145,17 @@ export function expandTransactionsForMonth(
   transactions.forEach((transaction) => {
     if (transaction.rec_mode === 'installment') {
       ;(transaction.installments || []).forEach((installment) => {
-        const due = new Date(`${installment.date}T12:00:00`)
+        const installmentDate = normalizeDateOnly(installment.date)
+        const due = parseDateAtNoon(installmentDate)
         if (due.getFullYear() !== year || due.getMonth() !== month) return
 
         rows.push({
-          date: installment.date,
+          date: installmentDate,
           description: `${transaction.description} (${installment.n}/${transaction.total_parcelas || 1})`,
           category: transaction.category,
           type: transaction.type,
           value: installment.value,
-          status: installment.paid ? 'Quitado' : installment.date < today ? 'Em aberto' : 'Pendente',
+          status: installment.paid ? 'Quitado' : installmentDate < today ? 'Em aberto' : 'Pendente',
           recMode: 'Parcelado',
           transactionId: transaction.id,
           installmentId: installment.id,
@@ -185,19 +186,20 @@ export function expandTransactionsForMonth(
       return
     }
 
-    const date = new Date(`${transaction.date}T12:00:00`)
+    const transactionDate = normalizeDateOnly(transaction.date)
+    const date = parseDateAtNoon(transactionDate)
     if (date.getFullYear() !== year || date.getMonth() !== month) return
 
-    const settlement = settlementLookup.get(`tx:${transaction.id}:${transaction.date}`)
+    const settlement = settlementLookup.get(`tx:${transaction.id}:${transactionDate}`)
     const settled = Boolean(settlement)
 
     rows.push({
-      date: transaction.date,
+      date: transactionDate,
       description: transaction.description,
       category: transaction.category,
       type: transaction.type,
       value: transaction.value,
-      status: getSettlementStatus(transaction.type, transaction.date, settled, today),
+      status: getSettlementStatus(transaction.type, transactionDate, settled, today),
       recMode: 'Avulso',
       transactionId: transaction.id,
       settled,
@@ -266,14 +268,15 @@ export function expandTransactionsForRange(
   transactions.forEach((transaction) => {
     if (transaction.rec_mode === 'installment') {
       ;(transaction.installments || []).forEach((installment) => {
-        if (installment.date < from || installment.date > to) return
+        const installmentDate = normalizeDateOnly(installment.date)
+        if (installmentDate < from || installmentDate > to) return
         rows.push({
-          date: installment.date,
+          date: installmentDate,
           description: `${transaction.description} (${installment.n}/${transaction.total_parcelas || 1})`,
           category: transaction.category,
           type: transaction.type,
           value: installment.value,
-          status: installment.paid ? 'Quitado' : installment.date < today ? 'Em aberto' : 'Pendente',
+          status: installment.paid ? 'Quitado' : installmentDate < today ? 'Em aberto' : 'Pendente',
           recMode: 'Parcelado',
           transactionId: transaction.id,
           installmentId: installment.id,
@@ -315,17 +318,18 @@ export function expandTransactionsForRange(
       return
     }
 
-    if (transaction.date >= from && transaction.date <= to) {
-      const settlement = settlementLookup.get(`tx:${transaction.id}:${transaction.date}`)
+    const transactionDate = normalizeDateOnly(transaction.date)
+    if (transactionDate >= from && transactionDate <= to) {
+      const settlement = settlementLookup.get(`tx:${transaction.id}:${transactionDate}`)
       const settled = Boolean(settlement)
 
       rows.push({
-        date: transaction.date,
+        date: transactionDate,
         description: transaction.description,
         category: transaction.category,
         type: transaction.type,
         value: transaction.value,
-        status: getSettlementStatus(transaction.type, transaction.date, settled, today),
+        status: getSettlementStatus(transaction.type, transactionDate, settled, today),
         recMode: 'Avulso',
         transactionId: transaction.id,
         settled,
@@ -371,8 +375,8 @@ export function buildPendingDebitRows(
   if (transactions.length === 0) return [] as ExpandedFinanceRow[]
 
   const earliestDate = transactions.reduce((earliest, transaction) => {
-    const installmentDates = (transaction.installments || []).map((installment) => installment.date)
-    const transactionDates = [transaction.date, ...installmentDates]
+    const installmentDates = (transaction.installments || []).map((installment) => normalizeDateOnly(installment.date))
+    const transactionDates = [normalizeDateOnly(transaction.date), ...installmentDates]
     const transactionEarliest = transactionDates.sort()[0] || transaction.date
     return transactionEarliest < earliest ? transactionEarliest : earliest
   }, referenceDate)
@@ -406,7 +410,7 @@ export function buildMetrics(
 }
 
 function nextOccurrenceFromDay(day: number, today: string) {
-  const todayDate = new Date(`${today}T12:00:00`)
+  const todayDate = parseDateAtNoon(today)
   const buildDate = (year: number, month: number) =>
     new Date(year, month, Math.min(day, daysInMonth(year, month)), 12)
 
@@ -455,11 +459,12 @@ export function buildUpcomingReminders(
       return
     }
 
-    if (transaction.date >= today) {
+    const transactionDate = normalizeDateOnly(transaction.date)
+    if (transactionDate >= today) {
       reminders.push({
         id: transaction.id,
         label: transaction.description,
-        date: transaction.date,
+        date: transactionDate,
         value: transaction.value,
         kind: 'expense',
       })
@@ -474,7 +479,7 @@ export function buildUpcomingReminders(
 
       const eventDate = event.repeat === 'monthly'
         ? nextOccurrenceFromDay(event.day || 1, today)
-        : event.date
+        : normalizeDateOnly(event.date)
 
       if (!eventDate || eventDate < today) return
 

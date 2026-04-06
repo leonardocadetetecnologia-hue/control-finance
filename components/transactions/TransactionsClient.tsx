@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { apiRequest } from '@/lib/api'
 import { exportCSV } from '@/lib/utils/export'
 import { expandTransactionsForMonth } from '@/lib/utils/finance'
-import { formatBRL, formatDate, todayISO } from '@/lib/utils/format'
+import { formatBRL, formatDate, normalizeDateOnly, parseDateAtNoon, todayISO } from '@/lib/utils/format'
 import { formatMoneyInput, parseMoneyInput, sanitizeMoneyDraft } from '@/lib/utils/money'
 import { useApp } from '@/components/layout/DashboardShell'
 import type { Category, Installment, Transaction } from '@/lib/types'
@@ -21,8 +21,8 @@ function toast(msg: string) {
 }
 
 function countMonthsInclusive(startDate: string, endDate: string) {
-  const start = new Date(`${startDate}T12:00:00`)
-  const end = new Date(`${endDate}T12:00:00`)
+  const start = parseDateAtNoon(startDate)
+  const end = parseDateAtNoon(endDate)
   const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
   return Math.max(1, months)
 }
@@ -113,18 +113,18 @@ export default function TransactionsClient({
     setRecMode(transaction.rec_mode)
     setDesc(transaction.description)
     setValue(formatMoneyInput(transaction.value))
-    setDate(transaction.date)
+    setDate(normalizeDateOnly(transaction.date))
     setCat(transaction.category)
     setParcelas(String(transaction.total_parcelas || 12))
     setDiaVenc(transaction.dia_venc ? String(transaction.dia_venc) : '')
     if (transaction.rec_mode === 'monthly' && transaction.dur_months) {
       setEndMode('end')
-      const end = new Date(`${transaction.date}T12:00:00`)
+      const end = parseDateAtNoon(transaction.date)
       end.setMonth(end.getMonth() + transaction.dur_months - 1)
       setEndDate(end.toISOString().split('T')[0])
     } else {
       setEndMode('no_end')
-      setEndDate(transaction.date)
+      setEndDate(normalizeDateOnly(transaction.date))
     }
   }
 
@@ -168,7 +168,7 @@ export default function TransactionsClient({
     }
 
     if (recMode === 'monthly') {
-      payload.dia_venc = diaVenc ? Number(diaVenc) : new Date(`${date}T12:00:00`).getDate()
+      payload.dia_venc = diaVenc ? Number(diaVenc) : parseDateAtNoon(date).getDate()
       payload.dur_months = endMode === 'end' ? countMonthsInclusive(date, endDate) : null
     }
 

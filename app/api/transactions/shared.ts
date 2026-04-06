@@ -1,4 +1,5 @@
 import { sql } from '@/lib/db'
+import { normalizeDateOnly, parseDateAtNoon } from '@/lib/utils/format'
 
 type TransactionPayload = {
   description: string
@@ -13,7 +14,7 @@ type TransactionPayload = {
 }
 
 function monthlyEventDate(startDate: string, offset: number, dueDay: number) {
-  const baseDate = new Date(`${startDate}T12:00:00`)
+  const baseDate = parseDateAtNoon(startDate)
   const year = baseDate.getFullYear()
   const month = baseDate.getMonth() + offset
   const lastDay = new Date(year, month + 1, 0).getDate()
@@ -42,7 +43,7 @@ export function buildTransactionChildStatements(userId: string, transactionId: s
 
   if (payload.recMode === 'installment' && payload.totalParcelas) {
     const perValue = payload.value / payload.totalParcelas
-    const dueDay = payload.diaVenc || new Date(`${payload.date}T12:00:00`).getDate()
+    const dueDay = payload.diaVenc || parseDateAtNoon(payload.date).getDate()
 
     for (let index = 0; index < payload.totalParcelas; index += 1) {
       const isoDate = monthlyEventDate(payload.date, index, dueDay)
@@ -61,7 +62,7 @@ export function buildTransactionChildStatements(userId: string, transactionId: s
   }
 
   if (payload.recMode === 'monthly') {
-    const dueDay = payload.diaVenc || new Date(`${payload.date}T12:00:00`).getDate()
+    const dueDay = payload.diaVenc || parseDateAtNoon(payload.date).getDate()
 
     if (payload.durMonths && payload.durMonths > 0) {
       for (let index = 0; index < payload.durMonths; index += 1) {
@@ -77,7 +78,7 @@ export function buildTransactionChildStatements(userId: string, transactionId: s
     } else {
       statements.push(sql`
         insert into events (id, user_id, transaction_id, description, value, type, repeat, day, date, category)
-        values (${crypto.randomUUID()}, ${userId}, ${transactionId}, ${payload.description}, ${payload.value}, ${payload.type}, 'monthly', ${dueDay}, ${payload.date}, ${payload.category})
+        values (${crypto.randomUUID()}, ${userId}, ${transactionId}, ${payload.description}, ${payload.value}, ${payload.type}, 'monthly', ${dueDay}, ${normalizeDateOnly(payload.date)}, ${payload.category})
       `)
     }
     return statements
@@ -85,7 +86,7 @@ export function buildTransactionChildStatements(userId: string, transactionId: s
 
   statements.push(sql`
     insert into events (id, user_id, transaction_id, description, value, type, repeat, day, date, category)
-    values (${crypto.randomUUID()}, ${userId}, ${transactionId}, ${payload.description}, ${payload.value}, ${payload.type}, 'once', ${new Date(`${payload.date}T12:00:00`).getDate()}, ${payload.date}, ${payload.category})
+    values (${crypto.randomUUID()}, ${userId}, ${transactionId}, ${payload.description}, ${payload.value}, ${payload.type}, 'once', ${parseDateAtNoon(payload.date).getDate()}, ${normalizeDateOnly(payload.date)}, ${payload.category})
   `)
 
   return statements

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireUserId } from '@/lib/auth-helpers'
 import { sql } from '@/lib/db'
+import { normalizeDateOnly } from '@/lib/utils/format'
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -33,6 +34,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     return NextResponse.json({
       ...rows[0],
+      date: normalizeDateOnly(rows[0].date),
       value: Number(rows[0].value || 0),
     })
   } catch (error: any) {

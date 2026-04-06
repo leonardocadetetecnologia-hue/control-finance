@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireUserId } from '@/lib/auth-helpers'
 import { sql } from '@/lib/db'
+import { normalizeDateOnly } from '@/lib/utils/format'
 import { parseMoneyInput } from '@/lib/utils/money'
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
@@ -47,7 +48,11 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: 'Evento nao encontrado.' }, { status: 404 })
     }
 
-    return NextResponse.json({ ...event, value: Number(event.value || 0) })
+    return NextResponse.json({
+      ...event,
+      date: event.date ? normalizeDateOnly(event.date) : undefined,
+      value: Number(event.value || 0),
+    })
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })

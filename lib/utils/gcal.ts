@@ -1,10 +1,12 @@
+import { normalizeDateOnly, parseDateAtNoon } from '@/lib/utils/format'
+
 export function buildGCalUrl(params: {
   title: string
   date: string
   description: string
   recurrence?: 'MONTHLY' | 'YEARLY'
 }): string {
-  const dt = params.date.replace(/-/g, '')
+  const dt = normalizeDateOnly(params.date).replace(/-/g, '')
   const title = encodeURIComponent(params.title)
   const details = encodeURIComponent(params.description)
   const recur = params.recurrence
@@ -22,7 +24,7 @@ function escapeIcsText(value: string) {
 }
 
 function addOneDay(date: string) {
-  const nextDate = new Date(`${date}T12:00:00`)
+  const nextDate = parseDateAtNoon(date)
   nextDate.setDate(nextDate.getDate() + 1)
   return nextDate.toISOString().split('T')[0]
 }
@@ -44,8 +46,9 @@ export function buildFinanceCalendarIcs(items: CalendarExportItem[], calendarNam
   ]
 
   items.forEach((item) => {
-    const date = item.date.replace(/-/g, '')
-    const nextDate = addOneDay(item.date).replace(/-/g, '')
+    const normalizedDate = normalizeDateOnly(item.date)
+    const date = normalizedDate.replace(/-/g, '')
+    const nextDate = addOneDay(normalizedDate).replace(/-/g, '')
     lines.push(
       'BEGIN:VEVENT',
       `UID:${item.id}@finance-control`,

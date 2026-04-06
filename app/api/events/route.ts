@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireUserId } from '@/lib/auth-helpers'
 import { sql } from '@/lib/db'
+import { normalizeDateOnly } from '@/lib/utils/format'
 import { parseMoneyInput } from '@/lib/utils/money'
 
 export async function POST(request: Request) {
@@ -30,7 +31,11 @@ export async function POST(request: Request) {
       returning id, user_id, transaction_id, installment_n, description, value, type, repeat, day, date, category
     `
 
-    return NextResponse.json({ ...event, value: Number(event.value || 0) })
+    return NextResponse.json({
+      ...event,
+      date: event.date ? normalizeDateOnly(event.date) : undefined,
+      value: Number(event.value || 0),
+    })
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })

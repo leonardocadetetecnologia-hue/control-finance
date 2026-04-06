@@ -9,16 +9,26 @@ type DbUser = {
 }
 
 type DbCategory = Omit<Category, 'created_at'> & { created_at: string | Date }
-type DbTransaction = Omit<Transaction, 'value' | 'created_at' | 'installments'> & { value: string | number; created_at: string | Date }
-type DbInstallment = Omit<Installment, 'value'> & { value: string | number; created_at?: string | Date }
-type DbEvent = Omit<CalendarEvent, 'value'> & { value: string | number; created_at?: string | Date }
-type DbIncome = Omit<IncomeSource, 'value'> & { value: string | number; created_at?: string | Date }
+type DbTransaction = Omit<Transaction, 'value' | 'created_at' | 'installments' | 'date'> & { value: string | number; date: string | Date; created_at: string | Date }
+type DbInstallment = Omit<Installment, 'value' | 'date'> & { value: string | number; date: string | Date; created_at?: string | Date }
+type DbEvent = Omit<CalendarEvent, 'value' | 'date'> & { value: string | number; date?: string | Date | null; created_at?: string | Date }
+type DbIncome = Omit<IncomeSource, 'value' | 'start_date'> & { value: string | number; start_date: string | Date; created_at?: string | Date }
 type DbGoal = Omit<Goal, 'current_value' | 'target_value'> & { current_value: string | number; target_value: string | number; created_at?: string | Date }
-type DbSettlement = Omit<CashflowSettlement, 'settled_at'> & { transaction_id?: string | null; income_source_id?: string | null; settled_at: string | Date; created_at?: string | Date }
+type DbSettlement = Omit<CashflowSettlement, 'settled_at' | 'occurrence_date'> & { transaction_id?: string | null; income_source_id?: string | null; occurrence_date: string | Date; settled_at: string | Date; created_at?: string | Date }
 
 function toIso(value: string | Date | undefined) {
   if (!value) return new Date().toISOString()
   return typeof value === 'string' ? value : value.toISOString()
+}
+
+function toDateOnly(value: string | Date | undefined | null) {
+  if (!value) return ''
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const parsed = typeof value === 'string' ? new Date(value) : value
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().split('T')[0]
+  }
+  return String(value).slice(0, 10)
 }
 
 function toNumber(value: string | number | undefined | null) {
@@ -68,7 +78,7 @@ export async function getTransactions(userId: string): Promise<Transaction[]> {
       transaction_id: row.transaction_id,
       user_id: row.user_id,
       n: row.n,
-      date: row.date,
+      date: toDateOnly(row.date),
       value: toNumber(row.value),
       paid: row.paid,
       rolled_over: row.rolled_over,
@@ -81,6 +91,7 @@ export async function getTransactions(userId: string): Promise<Transaction[]> {
 
   return txRows.map((row) => ({
     ...row,
+    date: toDateOnly(row.date),
     value: toNumber(row.value),
     created_at: toIso(row.created_at),
     installments: installmentsByTransaction.get(row.id) || [],
@@ -95,7 +106,11 @@ export async function getEvents(userId: string): Promise<CalendarEvent[]> {
     order by coalesce(date::text, lpad(coalesce(day, 1)::text, 2, '0')) asc
   ` as DbEvent[]
 
-  return rows.map((row) => ({ ...row, value: toNumber(row.value) }))
+  return rows.map((row) => ({
+    ...row,
+    date: row.date ? toDateOnly(row.date) : undefined,
+    value: toNumber(row.value),
+  }))
 }
 
 export async function getIncomeSources(userId: string): Promise<IncomeSource[]> {
@@ -106,7 +121,11 @@ export async function getIncomeSources(userId: string): Promise<IncomeSource[]> 
     order by created_at desc
   ` as DbIncome[]
 
-  return rows.map((row) => ({ ...row, value: toNumber(row.value) }))
+  return rows.map((row) => ({
+    ...row,
+    start_date: toDateOnly(row.start_date),
+    value: toNumber(row.value),
+  }))
 }
 
 export async function getGoals(userId: string): Promise<Goal[]> {
@@ -140,7 +159,7 @@ export async function getInstallments(userId: string): Promise<Installment[]> {
     transaction_id: row.transaction_id,
     user_id: row.user_id,
     n: row.n,
-    date: row.date,
+    date: toDateOnly(row.date),
     value: toNumber(row.value),
     paid: row.paid,
     rolled_over: row.rolled_over,
@@ -170,7 +189,7 @@ export async function getCashflowSettlements(userId: string): Promise<CashflowSe
     user_id: row.user_id,
     transaction_id: row.transaction_id || undefined,
     income_source_id: row.income_source_id || undefined,
-    occurrence_date: row.occurrence_date,
+    occurrence_date: toDateOnly(row.occurrence_date),
     settled_at: toIso(row.settled_at),
   }))
 }
